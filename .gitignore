@@ -1,0 +1,10 @@
+/target/
+/device-os/
+__pycache__/
+*.pyc
+*.bin
+*.elf
+*.hex
+*.map
+*.lst
+.env

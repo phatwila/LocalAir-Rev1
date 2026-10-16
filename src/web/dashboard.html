@@ -1,0 +1,1902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#09101b">
+  <title>LocalAir</title>
+  <style>
+    :root{
+      color-scheme:dark;
+      --bg:#09101b;
+      --surface-1:rgba(14,22,36,0.96);
+      --surface-2:#162238;
+      --surface-3:#1b2942;
+      --surface-card:rgba(69,212,209,0.07);
+      --border:#293750;
+      --text:#ecf2fb;
+      --muted:#96a7c6;
+      --accent:#49d6d6;
+      --accent-2:#74e7a9;
+      --warn:#ffd06f;
+      --bad:#ff7c7c;
+      --good:#7ef0c1;
+      --shadow-1:0 20px 38px rgba(0,0,0,0.34);
+      --radius-sm:10px;
+      --radius-md:14px;
+      --radius-lg:18px;
+      --radius-pill:999px;
+      --space-1:4px;
+      --space-2:8px;
+      --space-3:12px;
+      --space-4:16px;
+      --space-5:22px;
+      --space-6:28px;
+      --control-h:40px;
+      --layout-max:1200px;
+      --transition-fast:.15s;
+      --transition-med:.28s;
+      --fs-label:.72rem;
+      --fs-sm:.82rem;
+      --fs-md:.92rem;
+      --fs-lg:1.08rem;
+      --fs-h2:1.02rem;
+      --fs-h1:clamp(1.9rem,3vw,3rem);
+      --fs-display:1.9rem;
+    }
+    *{box-sizing:border-box}
+    html{background:var(--bg)}
+    body{
+      margin:0;
+      min-height:100vh;
+      color:var(--text);
+      font-family:"Space Grotesk","Segoe UI",system-ui,sans-serif;
+      background:
+        radial-gradient(circle at 14% 8%, rgba(29,58,102,0.88) 0%, rgba(17,26,42,0.74) 34%, transparent 56%),
+        linear-gradient(180deg, #0b1220 0%, #08111d 100%);
+    }
+    button,input,select,summary{font:inherit}
+    button,input,select{
+      min-height:var(--control-h);
+      border-radius:var(--radius-sm);
+      border:1px solid var(--border);
+      background:var(--surface-3);
+      color:var(--text);
+      padding:0 var(--space-3);
+    }
+    button{
+      font-size:var(--fs-md);
+      font-weight:700;
+      cursor:pointer;
+      transition:border-color var(--transition-fast),background var(--transition-fast),transform var(--transition-fast);
+    }
+    button:hover{border-color:var(--accent)}
+    button.primary{background:var(--accent);border-color:transparent;color:#07111d}
+    button.active{background:var(--accent-2);border-color:transparent;color:#07111d}
+    button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+    button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{
+      outline:2px solid var(--accent);
+      outline-offset:3px;
+    }
+    input[type=range]{accent-color:var(--accent);padding:0}
+    input[type=color]{padding:var(--space-1);max-width:none;cursor:pointer}
+    input[type=time]{color-scheme:dark;appearance:none;-webkit-appearance:none}
+    input[type=time]::-webkit-calendar-picker-indicator{filter:invert(1) opacity(.75)}
+    input[type=checkbox]{width:auto;min-height:auto}
+    select{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .page{
+      max-width:var(--layout-max);
+      margin:0 auto;
+      padding:
+        calc(var(--space-4) + env(safe-area-inset-top, 0px))
+        calc(var(--space-4) + env(safe-area-inset-right, 0px))
+        calc(var(--space-5) + env(safe-area-inset-bottom, 0px))
+        calc(var(--space-4) + env(safe-area-inset-left, 0px));
+    }
+    .surface{
+      border:1px solid var(--border);
+      border-radius:var(--radius-lg);
+      background:var(--surface-1);
+      box-shadow:var(--shadow-1);
+    }
+    .stack{display:flex;flex-direction:column;gap:var(--space-4)}
+    .stack-tight{display:flex;flex-direction:column;gap:var(--space-2)}
+    .cluster{display:flex;flex-wrap:wrap;gap:var(--space-2);align-items:center}
+    .grid{display:grid;gap:var(--space-3)}
+    .summary-panel.surface{
+      display:grid;
+      gap:var(--space-4);
+      padding:var(--space-5);
+      margin-bottom:var(--space-4);
+    }
+    .summary-hero{
+      display:grid;
+      gap:var(--space-3);
+      align-items:start;
+    }
+    .hero-copy{display:flex;flex-direction:column;gap:var(--space-1)}
+    h1{margin:0;font-size:var(--fs-h1);line-height:.98;letter-spacing:-.03em}
+    .sub{color:var(--muted);font-size:var(--fs-lg);line-height:1.3}
+    .device-meta{
+      color:var(--accent-2);
+      font-size:var(--fs-sm);
+      font-weight:700;
+      letter-spacing:.03em;
+    }
+    .quality-card{
+      min-width:min(100%,240px);
+      padding:var(--space-3) var(--space-4);
+      border-radius:var(--radius-md);
+      background:var(--surface-2);
+      border:1px solid var(--border);
+    }
+    .quality-card .stat-label,
+    .stat-label{
+      font-size:var(--fs-label);
+      text-transform:uppercase;
+      letter-spacing:.12em;
+      color:var(--muted);
+    }
+    .quality-card .stat-value,
+    .stat-value{
+      margin-top:var(--space-1);
+      font-size:var(--fs-lg);
+      font-weight:700;
+    }
+    .status-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(118px,1fr));
+      gap:var(--space-3);
+    }
+    .status-badge{
+      grid-column:1 / -1;
+      display:flex;
+      flex-wrap:wrap;
+      gap:var(--space-2);
+      align-items:center;
+    }
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      min-height:34px;
+      padding:0 var(--space-3);
+      border-radius:var(--radius-pill);
+      border:1px solid var(--border);
+      background:var(--surface-3);
+      color:var(--muted);
+      font-size:var(--fs-sm);
+      font-weight:700;
+    }
+    .pill.live{color:var(--good)}
+    .pill.warn{color:var(--warn)}
+    .pill.bad{color:var(--bad)}
+    .stat{
+      min-width:0;
+      padding:var(--space-3);
+      border-radius:var(--radius-md);
+      border:1px solid var(--border);
+      background:var(--surface-2);
+    }
+    .layout{
+      display:grid;
+      grid-template-areas:
+        "control"
+        "telemetry"
+        "settings"
+        "system";
+      gap:var(--space-4);
+    }
+    .panel{
+      display:flex;
+      flex-direction:column;
+      gap:var(--space-4);
+      padding:var(--space-4);
+    }
+    .panel-head{
+      display:flex;
+      flex-wrap:wrap;
+      gap:var(--space-2);
+      align-items:flex-end;
+      justify-content:space-between;
+    }
+    .panel-title{
+      margin:0;
+      font-size:var(--fs-h2);
+      text-transform:uppercase;
+      letter-spacing:.1em;
+      color:var(--muted);
+    }
+    .panel-body{display:flex;flex-direction:column;gap:var(--space-4)}
+    .panel-control{grid-area:control}
+    .panel-telemetry{grid-area:telemetry}
+    .panel-settings{grid-area:settings}
+    .col-left{display:contents}
+    .panel-system{grid-area:system}
+    .mode-switch{display:flex;gap:var(--space-2);flex-wrap:wrap}
+    .group{
+      margin:0;
+      padding:var(--space-3);
+      border-radius:var(--radius-md);
+      border:1px solid var(--border);
+      background:rgba(9,16,27,0.46);
+    }
+    .group+ .group{margin-top:var(--space-3)}
+    legend{
+      padding:0 var(--space-2);
+      color:var(--muted);
+      font-size:var(--fs-label);
+      text-transform:uppercase;
+      letter-spacing:.12em;
+    }
+    label{display:block;font-size:var(--fs-sm);color:var(--muted)}
+    .field-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+      gap:var(--space-3);
+    }
+    .field{display:flex;flex-direction:column;gap:var(--space-1);min-width:0}
+    .field-span-full{grid-column:1 / -1}
+    .helper,.meta{font-size:var(--fs-sm);color:var(--muted)}
+    .helper{line-height:1.35}
+    .meta.good{color:var(--good)}
+    .meta.warn{color:var(--warn)}
+    .meta.bad{color:var(--bad)}
+    .value-readout{font-size:var(--fs-display);font-weight:700;line-height:1}
+    .tag{
+      display:inline-flex;
+      align-items:center;
+      min-height:28px;
+      padding:0 var(--space-2);
+      border-radius:var(--radius-pill);
+      border:1px solid var(--border);
+      background:var(--surface-3);
+      color:var(--muted);
+      font-size:var(--fs-label);
+      max-width:100%;
+      overflow:hidden;
+      text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    .cards{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(145px,1fr));
+      gap:var(--space-3);
+    }
+    .card{
+      border:1px solid var(--border);
+      border-radius:var(--radius-md);
+      padding:var(--space-3);
+      background:linear-gradient(180deg, var(--surface-card), rgba(14,22,36,0.5));
+      min-height:92px;
+    }
+    .card .stat-label{font-size:var(--fs-label)}
+    .card .stat-value{
+      margin-top:var(--space-1);
+      font-size:var(--fs-display);
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .card .card-note{margin-top:var(--space-1);font-size:var(--fs-md);color:var(--muted)}
+    .chart-stack{display:flex;flex-direction:column;gap:var(--space-3)}
+    .chart-card{
+      border:1px solid var(--border);
+      border-radius:var(--radius-md);
+      padding:var(--space-3);
+      background:rgba(9,16,27,0.54);
+    }
+    .chart-head{
+      display:flex;
+      align-items:baseline;
+      justify-content:space-between;
+      gap:var(--space-2);
+      margin-bottom:var(--space-2);
+    }
+    .chart-card h3{
+      margin:0;
+      color:var(--muted);
+      font-size:var(--fs-sm);
+      text-transform:uppercase;
+      letter-spacing:.12em;
+    }
+    .chart-meta{font-size:var(--fs-sm);color:var(--muted);white-space:nowrap}
+    canvas{display:block;width:100%;height:140px}
+    .inline-picker{
+      display:flex;
+      align-items:center;
+      gap:var(--space-3);
+      margin-top:var(--space-2);
+      padding-top:var(--space-2);
+      border-top:1px solid var(--border);
+    }
+    .preview-dot{
+      width:28px;
+      height:28px;
+      border-radius:50%;
+      border:1px solid var(--border);
+      flex:0 0 auto;
+    }
+    .sw{position:relative;display:inline-block;width:38px;height:22px;flex:0 0 auto;margin-top:1px}
+    .sw input{position:absolute;inset:0;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+    .sw::before{content:"";position:absolute;inset:0;background:var(--border);border-radius:var(--radius-pill);transition:background var(--transition-fast)}
+    .sw::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform var(--transition-fast)}
+    .sw:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:3px;border-radius:var(--radius-pill)}
+    .sw:has(input:checked)::before{background:var(--accent)}
+    .sw:has(input:checked)::after{transform:translateX(16px)}
+    .action-bar{
+      display:flex;
+      flex-wrap:wrap;
+      gap:var(--space-2);
+      align-items:center;
+      justify-content:space-between;
+    }
+    .action-bar-end{
+      display:flex;
+      flex-wrap:wrap;
+      gap:var(--space-2);
+      justify-content:flex-end;
+    }
+    .toggle-row{
+      display:flex;
+      align-items:center;
+      gap:var(--space-2);
+      min-height:var(--control-h);
+    }
+    .toggle-row:has(input:disabled){opacity:.5}
+    .section-copy{display:flex;flex-direction:column;gap:var(--space-2)}
+    .section-note{margin-top:var(--space-2)}
+    .section-divider{height:1px;background:var(--border)}
+    .hidden{display:none}
+    .toast{
+      position:fixed;
+      top:calc(var(--space-4) + env(safe-area-inset-top, 0px));
+      left:50%;
+      transform:translateX(-50%);
+      z-index:999;
+      padding:var(--space-3) var(--space-5);
+      border-radius:var(--radius-pill);
+      font-size:var(--fs-md);
+      font-weight:700;
+      opacity:0;
+      pointer-events:none;
+      transition:opacity var(--transition-med);
+    }
+    .toast.show{opacity:1}
+    .toast.ok{background:var(--good);color:#071710}
+    .toast.err{background:var(--bad);color:#240707}
+    @media (max-width:599px){
+      .page{
+        padding:
+          calc(var(--space-3) + env(safe-area-inset-top, 0px))
+          calc(var(--space-3) + env(safe-area-inset-right, 0px))
+          calc(var(--space-4) + env(safe-area-inset-bottom, 0px))
+          calc(var(--space-3) + env(safe-area-inset-left, 0px));
+      }
+      .summary-panel.surface,
+      .panel{padding:var(--space-3)}
+      .card .stat-value{font-size:1.55rem}
+      .status-grid{grid-template-columns:repeat(auto-fit,minmax(96px,1fr))}
+      .status-badge{justify-content:center}
+      .toast{top:calc(var(--space-3) + env(safe-area-inset-top, 0px));padding:var(--space-2) var(--space-4)}
+    }
+    @media (min-width:1200px){
+      .summary-hero{
+        grid-template-columns:minmax(0,1fr) auto;
+        gap:var(--space-4);
+      }
+      .layout{
+        grid-template-columns:minmax(0,.94fr) minmax(0,1.06fr);
+        grid-template-areas:
+          "left telemetry"
+          "system system";
+      }
+      .col-left{
+        display:flex;
+        flex-direction:column;
+        gap:var(--space-4);
+        grid-area:left;
+        min-width:0;
+      }
+      /* Last left panel stretches so both column bottoms align. */
+      .col-left .panel-settings{flex:1}
+      /* Telemetry matches the left column height; charts flex to fill it. */
+      .panel-telemetry .panel-body{flex:1}
+      .panel-telemetry .chart-stack{flex:1}
+      .panel-telemetry .chart-card{
+        flex:1;
+        display:flex;
+        flex-direction:column;
+        min-height:0;
+      }
+      .panel-telemetry .chart-card canvas{flex:1;height:auto;min-height:120px}
+      /* System groups sit side by side in the full-width bottom band. */
+      .panel-system .panel-body{
+        display:grid;
+        grid-template-columns:repeat(2,minmax(0,1fr));
+        gap:var(--space-4);
+        align-items:start;
+      }
+      .panel-system .group+ .group{margin-top:0}
+    }
+    @media (prefers-reduced-motion: reduce){
+      *,*::before,*::after{
+        transition-duration:1ms!important;
+        transition-delay:0ms!important;
+        scroll-behavior:auto!important;
+      }
+    }
+    @media (forced-colors: active){
+      :root{color-scheme:dark}
+      body,.surface,.stat,.card,.chart-card,.group,.pill,.tag,input,select,button{
+        background:Canvas;
+        color:CanvasText;
+        border-color:CanvasText;
+        box-shadow:none;
+      }
+      button.primary,button.active,.pill.live,.pill.warn,.pill.bad{
+        forced-color-adjust:none;
+        background:Highlight;
+        color:HighlightText;
+        border-color:Highlight;
+      }
+      .sw::before{background:ButtonFace;border:1px solid ButtonText}
+      .sw::after{background:ButtonText}
+      .sw:has(input:checked)::before{background:Highlight}
+      button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible,.sw:has(input:focus-visible){
+        outline:2px solid Highlight;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="summary-panel surface">
+      <div class="summary-hero">
+        <div class="hero-copy">
+          <h1>LocalAir</h1>
+          <div class="sub">Independent firmware for Aura Air.</div>
+          <div class="device-meta" id="status-hostname">Hostname: --</div>
+          <div class="device-meta" id="status-version">Build: pending</div>
+        </div>
+        <div class="quality-card">
+          <div class="stat-label">Live quality</div>
+          <div class="stat-value" id="status-quality">--</div>
+        </div>
+      </div>
+      <div class="status-grid">
+        <div class="status-badge">
+          <span class="pill live" id="stream-status">Connecting...</span>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Mode</div>
+          <div class="stat-value" id="status-mode">--</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Output</div>
+          <div class="stat-value" id="status-output">--</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">RPM</div>
+          <div class="stat-value" id="status-rpm">--</div>
+        </div>
+        <div class="stat" id="status-target-card">
+          <div class="stat-label" id="status-target-label">Target</div>
+          <div class="stat-value" id="status-target">--</div>
+        </div>
+        <div class="stat" id="status-startup-card">
+          <div class="stat-label">Startup</div>
+          <div class="stat-value" id="status-startup">--</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Auto floor</div>
+          <div class="stat-value" id="status-clamp">--</div>
+        </div>
+      </div>
+    </header>
+
+    <div id="toast" class="toast"></div>
+
+    <main class="layout">
+      <div class="col-left">
+      <section class="panel panel-control surface" id="section-control">
+        <header class="panel-head">
+          <h2 class="panel-title">Primary Control</h2>
+        </header>
+        <div class="panel-body">
+          <div class="mode-switch">
+            <button id="btn-auto" class="active" type="button">Auto</button>
+            <button id="btn-manual" type="button">Manual</button>
+          </div>
+
+          <div id="manual-panel" class="section-copy">
+            <fieldset class="group">
+              <legend>Fan speed</legend>
+              <div class="stack-tight">
+                <span class="value-readout" id="manual-val">52%</span>
+                <input id="manual-slider" type="range" min="0" max="100" value="52">
+                <div class="meta" id="manual-hold-status"></div>
+              </div>
+            </fieldset>
+          </div>
+
+          <fieldset class="group">
+            <legend>Status LED</legend>
+            <div class="toggle-row">
+              <span class="sw"><input id="cfg-led-enabled" type="checkbox"></span>
+              <label for="cfg-led-enabled">Enabled</label>
+            </div>
+            <div class="toggle-row">
+              <span class="sw"><input id="cfg-led-custom-enabled" type="checkbox"></span>
+              <label for="cfg-led-custom-enabled">Custom color</label>
+            </div>
+            <div class="inline-picker hidden" id="cfg-led-inline-picker">
+              <div id="cfg-led-preview" class="preview-dot" aria-hidden="true"></div>
+              <input id="cfg-led-color" type="color" value="#ffffff">
+            </div>
+            <div class="helper section-note">Off = dark. Default = mode colors. Custom = fixed color.</div>
+            <div class="meta section-note" id="led-save-status"></div>
+          </fieldset>
+        </div>
+      </section>
+
+
+      <section class="panel panel-settings surface" id="section-tuning">
+        <header class="panel-head">
+          <h2 class="panel-title">Room Tuning</h2>
+        </header>
+        <div class="panel-body">
+          <fieldset class="group">
+            <legend>Room profile</legend>
+            <div class="field-grid">
+              <div class="field field-span-full">
+                <label for="cfg-room-profile">Preset</label>
+                <select id="cfg-room-profile">
+                  <option value="sleep">Sleep</option>
+                  <option value="everyday">Everyday</option>
+                  <option value="open_plan">Open plan</option>
+                </select>
+              </div>
+              <div class="field field-span-full">
+                <div class="helper" id="cfg-room-note">Defines control policy for this room.</div>
+              </div>
+              <div class="field">
+                <label>Active</label>
+                <div class="tag" id="cfg-profile-summary">--</div>
+              </div>
+              <div class="field">
+                <label>Volume</label>
+                <div class="tag" id="cfg-room-summary">--</div>
+              </div>
+            </div>
+            <div class="meta hidden section-note" id="cfg-room-override-note">custom room size active</div>
+            <div class="meta section-note" id="room-save-status"></div>
+            <details id="room-custom" class="section-note">
+              <summary>Advanced room override</summary>
+              <div class="field-grid">
+                <div class="field field-span-full">
+                  <label for="cfg-room-m3">Room (m&sup3;)</label>
+                  <input id="cfg-room-m3" type="number" min="5" max="500" step="0.5">
+                </div>
+              </div>
+              <div class="helper section-note">Optional override for room volume.</div>
+            </details>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>Auto limits</legend>
+            <div class="field-grid">
+              <div class="field">
+                <label for="cfg-min-fan-percent">Min %</label>
+                <input id="cfg-min-fan-percent" type="number" min="40" max="99" step="1" value="50">
+              </div>
+              <div class="field">
+                <label for="cfg-max-fan-percent">Max %</label>
+                <input id="cfg-max-fan-percent" type="number" min="10" max="100" step="1" value="100">
+              </div>
+            </div>
+            <div class="helper section-note">Applies to auto mode only. Min enforces a 40% minimum.</div>
+            <div class="meta section-note" id="limits-save-status"></div>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>Schedule</legend>
+            <div class="helper">Fixed fan speed during configured hours.</div>
+            <div class="field-grid section-note">
+              <div class="field">
+                <label for="cfg-sched-start">Start</label>
+                <input id="cfg-sched-start" type="time" value="22:00">
+              </div>
+              <div class="field">
+                <label for="cfg-sched-end">End</label>
+                <input id="cfg-sched-end" type="time" value="07:00">
+              </div>
+              <div class="field field-span-full">
+                <label for="cfg-sched-pct">Speed — <span id="cfg-sched-pct-label">35</span>%</label>
+                <input id="cfg-sched-pct" type="range" min="0" max="100" step="1" value="35">
+              </div>
+            </div>
+            <div class="action-bar section-note">
+              <div class="toggle-row">
+                <span class="sw"><input id="cfg-sched-enabled" type="checkbox"></span>
+                <label for="cfg-sched-enabled">Enabled</label>
+              </div>
+              <div class="meta" id="sched-active-status"></div>
+            </div>
+            <div class="helper section-note" id="cfg-timezone-display">Timezone: detecting...</div>
+            <div class="meta section-note" id="sched-save-status"></div>
+          </fieldset>
+
+        </div>
+      </section>
+
+      </div>
+
+      <section class="panel panel-telemetry surface" id="section-telemetry">
+        <header class="panel-head">
+          <h2 class="panel-title">Live Telemetry</h2>
+        </header>
+        <div class="panel-body">
+          <div class="cards">
+            <article class="card"><div class="stat-label">VOC</div><div class="stat-value" id="voc">--</div><div class="card-note">ppb filtered</div></article>
+            <article class="card"><div class="stat-label">VOC velocity</div><div class="stat-value" id="vel">--</div><div class="card-note">ppb/sample</div></article>
+            <article class="card"><div class="stat-label">PM2.5</div><div class="stat-value" id="pm25">--</div><div class="card-note">&micro;g/m&sup3;</div></article>
+            <article class="card"><div class="stat-label">eCO2</div><div class="stat-value" id="eco2">--</div><div class="card-note">ppm est.</div></article>
+            <article class="card"><div class="stat-label">Temp</div><div class="stat-value" id="temp">--</div><div class="card-note">&deg;C</div></article>
+            <article class="card"><div class="stat-label">RH</div><div class="stat-value" id="rh">--</div><div class="card-note">%</div></article>
+          </div>
+          <div class="section-divider"></div>
+          <div class="chart-stack">
+            <div class="chart-card">
+              <div class="chart-head"><h3>VOC Trend</h3><span class="chart-meta" id="chart-voc-meta"></span></div>
+              <canvas id="chart-voc" aria-label="VOC trend chart for recent filtered readings" role="img"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head"><h3>PM2.5 Trend</h3><span class="chart-meta" id="chart-pm-meta"></span></div>
+              <canvas id="chart-pm" aria-label="PM2.5 trend chart for recent particle readings" role="img"></canvas>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head"><h3>eCO2 Trend</h3><span class="chart-meta" id="chart-eco2-meta"></span></div>
+              <canvas id="chart-eco2" aria-label="eCO2 trend chart for recent estimated readings" role="img"></canvas>
+            </div>
+            <div class="helper">Last 30 samples, newest right.</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel panel-system surface" id="section-system">
+        <header class="panel-head">
+          <h2 class="panel-title">System</h2>
+        </header>
+        <div class="panel-body">
+          <fieldset class="group">
+            <legend>Network</legend>
+            <div class="field-grid section-note">
+              <div class="field field-span-full">
+                <label for="cfg-hostname-base">Device hostname</label>
+                <input id="cfg-hostname-base" type="text" maxlength="23" pattern="[a-z0-9]([a-z0-9-]*[a-z0-9])?" placeholder="localair" autocomplete="off" spellcheck="false">
+                <div class="helper section-note" id="cfg-hostname-status">Active: <span id="mdns-active-host">--</span>.local</div>
+                <div class="helper section-note">Use http:// on the same local network. If .local fails, open the device IP shown above. Cellular routing, VPNs, and guest networks can prevent local access.</div>
+              </div>
+              <div class="field field-span-full">
+                <div class="toggle-row">
+                  <span class="sw"><input id="cfg-static-ip-enabled" type="checkbox"></span>
+                  <label for="cfg-static-ip-enabled">Pin current IP</label>
+                </div>
+                <div class="helper section-note" id="static-ip-summary">DHCP assigned, not pinned.</div>
+                <div class="helper section-note">A router DHCP reservation keeps your address stable. Reserve or exclude an address before pinning it here.</div>
+                <details id="static-ip-advanced" class="section-note">
+                  <summary>Advanced network override</summary>
+                  <div class="field-grid">
+                    <div class="field">
+                      <label for="cfg-static-ip">IP address</label>
+                      <input id="cfg-static-ip" type="text" inputmode="decimal" placeholder="auto" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="field">
+                      <label for="cfg-static-netmask">Netmask</label>
+                      <input id="cfg-static-netmask" type="text" inputmode="decimal" placeholder="auto" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="field">
+                      <label for="cfg-static-gateway">Gateway</label>
+                      <input id="cfg-static-gateway" type="text" inputmode="decimal" placeholder="auto" autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="field">
+                      <label for="cfg-static-dns">DNS</label>
+                      <input id="cfg-static-dns" type="text" inputmode="decimal" placeholder="auto" autocomplete="off" spellcheck="false">
+                    </div>
+                  </div>
+                  <div class="helper section-note">Blank fields capture the current DHCP lease when pinning.</div>
+                </details>
+              </div>
+            </div>
+            <div class="meta section-note" id="config-status"></div>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>MQTT</legend>
+            <div class="field-grid section-note">
+              <div class="field field-span-full">
+                <label for="cfg-mqtt-broker-ip">Broker host/IP</label>
+                <input id="cfg-mqtt-broker-ip" type="text" placeholder="broker.local">
+                <div class="helper section-note">Hostname or IP. Leave blank to clear.</div>
+              </div>
+              <div class="field">
+                <label for="cfg-mqtt-port">Port</label>
+                <input id="cfg-mqtt-port" type="number" min="1" max="65535" step="1">
+              </div>
+              <div class="field">
+                <label for="cfg-mqtt-user">Username</label>
+                <input id="cfg-mqtt-user" type="text" autocomplete="off" placeholder="optional">
+              </div>
+              <div class="field field-span-full">
+                <label for="cfg-mqtt-pass">Password</label>
+                <input id="cfg-mqtt-pass" type="password" autocomplete="off" placeholder="leave blank to keep">
+              </div>
+            </div>
+            <div class="meta mqtt-status-line section-note" id="mqtt-live-status">MQTT status: --</div>
+            <div class="helper section-note">Password left blank keeps the saved value. Use Clear auth to remove credentials.</div>
+            <div class="action-bar section-note">
+              <div class="toggle-row">
+                <span class="sw"><input id="cfg-mqtt-enabled" type="checkbox"></span>
+                <label for="cfg-mqtt-enabled">MQTT</label>
+              </div>
+              <div class="action-bar-end">
+                <button id="clear-mqtt-auth" type="button">Clear auth</button>
+                <button id="test-mqtt" type="button">Test MQTT</button>
+              </div>
+            </div>
+            <div class="meta section-note" id="mqtt-test-status"></div>
+          </fieldset>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function(){
+      const MAX=30;
+      const ROOM_PRESETS={
+        sleep:{label:"Sleep",roomM3:20,note:"Quiet room policy. Quieter default airflow behavior."},
+        everyday:{label:"Everyday",roomM3:30,note:"Default policy for most rooms."},
+        open_plan:{label:"Open plan",roomM3:40,note:"Larger room policy with broader airflow demand."}
+      };
+      const VISIBLE_ROOM_PRESET_KEYS=["sleep","everyday","open_plan"];
+
+      const el=(id)=>document.getElementById(id);
+      const dom={
+        toast:el("toast"),
+        streamStatus:el("stream-status"),
+        summary:{
+          hostname:el("status-hostname"),
+          version:el("status-version"),
+          quality:el("status-quality"),
+          mode:el("status-mode"),
+          output:el("status-output"),
+          rpm:el("status-rpm"),
+          targetCard:el("status-target-card"),
+          targetLabel:el("status-target-label"),
+          target:el("status-target"),
+          startupCard:el("status-startup-card"),
+          startup:el("status-startup"),
+          clamp:el("status-clamp")
+        },
+        control:{
+          auto:el("btn-auto"),
+          manual:el("btn-manual"),
+          manualPanel:el("manual-panel"),
+          manualSlider:el("manual-slider"),
+          manualVal:el("manual-val"),
+          holdStatus:el("manual-hold-status"),
+          minFanPercent:el("cfg-min-fan-percent"),
+          maxFanPercent:el("cfg-max-fan-percent"),
+          limitsSaveStatus:el("limits-save-status")
+        },
+        telemetry:{
+          voc:el("voc"),
+          vel:el("vel"),
+          pm25:el("pm25"),
+          eco2:el("eco2"),
+          temp:el("temp"),
+          rh:el("rh"),
+          chartVoc:el("chart-voc"),
+          chartPm:el("chart-pm"),
+          chartEco2:el("chart-eco2"),
+          chartVocMeta:el("chart-voc-meta"),
+          chartPmMeta:el("chart-pm-meta"),
+          chartEco2Meta:el("chart-eco2-meta")
+        },
+        room:{
+          profile:el("cfg-room-profile"),
+          profileSummary:el("cfg-profile-summary"),
+          note:el("cfg-room-note"),
+          roomSummary:el("cfg-room-summary"),
+          overrideNote:el("cfg-room-override-note"),
+          roomSaveStatus:el("room-save-status"),
+          custom:el("room-custom"),
+          roomM3:el("cfg-room-m3")
+        },
+        led:{
+          enabled:el("cfg-led-enabled"),
+          customEnabled:el("cfg-led-custom-enabled"),
+          color:el("cfg-led-color"),
+          preview:el("cfg-led-preview"),
+          inlinePicker:el("cfg-led-inline-picker"),
+          saveStatus:el("led-save-status")
+        },
+        schedule:{
+          enabled:el("cfg-sched-enabled"),
+          start:el("cfg-sched-start"),
+          end:el("cfg-sched-end"),
+          pct:el("cfg-sched-pct"),
+          pctLabel:el("cfg-sched-pct-label"),
+          activeStatus:el("sched-active-status"),
+          saveStatus:el("sched-save-status"),
+          timezoneDisplay:el("cfg-timezone-display")
+        },
+        mqtt:{
+          brokerIp:el("cfg-mqtt-broker-ip"),
+          port:el("cfg-mqtt-port"),
+          user:el("cfg-mqtt-user"),
+          pass:el("cfg-mqtt-pass"),
+          enabled:el("cfg-mqtt-enabled"),
+          liveStatus:el("mqtt-live-status"),
+          testStatus:el("mqtt-test-status"),
+          clearAuth:el("clear-mqtt-auth"),
+          test:el("test-mqtt")
+        },
+        system:{
+          hostnameBase:el("cfg-hostname-base"),
+          hostnameStatus:el("cfg-hostname-status"),
+          mdnsActiveHost:el("mdns-active-host"),
+          configStatus:el("config-status"),
+          staticIpEnabled:el("cfg-static-ip-enabled"),
+          staticIpSummary:el("static-ip-summary"),
+          staticIp:el("cfg-static-ip"),
+          staticNetmask:el("cfg-static-netmask"),
+          staticGateway:el("cfg-static-gateway"),
+          staticDns:el("cfg-static-dns")
+        }
+      };
+
+      const state={
+        status:null,
+        config:null,
+        ui:{
+          toastTimer:null,
+          sliderActive:false,
+          pendingWrites:0,
+          lastManualCommandPercent:null,
+          manualDebounce:null,
+          saveTimers:{}
+        },
+        transport:{
+          sseConnected:false,
+          sseLastTs:0,
+          restLastTs:0,
+          statusPollInFlight:false,
+          lastStatusPollAttempt:0,
+          eventSource:null
+        },
+        history:{voc:[],pm:[],eco2:[]}
+      };
+
+      const CONFIG_FIELDS=[
+        {key:"hostname_base",node:dom.system.hostnameBase,defaultValue:"localair"},
+        {key:"max_fan_percent",node:dom.control.maxFanPercent,defaultValue:"100"},
+        {key:"min_fan_percent",node:dom.control.minFanPercent,defaultValue:"40"},
+        {key:"mqtt_broker_ip",node:dom.mqtt.brokerIp,defaultValue:""},
+        {key:"mqtt_port",node:dom.mqtt.port,defaultValue:""},
+        {key:"mqtt_user",node:dom.mqtt.user,defaultValue:""},
+        {key:"static_ip",node:dom.system.staticIp,defaultValue:""},
+        {key:"static_netmask",node:dom.system.staticNetmask,defaultValue:""},
+        {key:"static_gateway",node:dom.system.staticGateway,defaultValue:""},
+        {key:"static_dns",node:dom.system.staticDns,defaultValue:""}
+      ];
+
+      function setText(node,value){
+        if(node) node.textContent=value;
+      }
+
+      function setTone(node,baseClass,tone,text){
+        if(!node) return;
+        if(text!==undefined) node.textContent=text;
+        node.className=tone ? baseClass+" "+tone : baseClass;
+      }
+
+      function num(value){
+        if(value===null || value===undefined || value==="") return NaN;
+        const parsed=Number(value);
+        return Number.isFinite(parsed) ? parsed : NaN;
+      }
+
+      function fixed(value,digits){
+        const parsed=num(value);
+        return Number.isFinite(parsed) ? parsed.toFixed(digits) : "--";
+      }
+
+      function rounded(value){
+        const parsed=num(value);
+        return Number.isFinite(parsed) ? String(Math.round(parsed)) : "--";
+      }
+
+      function clampInt(value,min,max,fallback){
+        const parsed=Math.round(Number(value));
+        const safe=Number.isFinite(parsed) ? parsed : fallback;
+        return Math.min(max,Math.max(min,safe));
+      }
+
+      function fanPercentFromSpeed(speed,min,max){
+        const safeMin=Number.isFinite(min) ? min : 1;
+        const safeMax=Number.isFinite(max) ? max : 16;
+        const parsed=num(speed);
+        if(!Number.isFinite(parsed) || safeMax<=safeMin) return NaN;
+        if(parsed<=safeMin) return 100;
+        if(parsed>=safeMax) return 0;
+        return Math.round(((safeMax - parsed) * 100) / (safeMax - safeMin));
+      }
+
+      function manualCommandPercentFromControl(control,fallback){
+        const serverManual=num(control && control.manual_command_percent);
+        if(Number.isFinite(serverManual)) return serverManual;
+        const target=num(control && control.v3_target_airflow_pct);
+        if(Number.isFinite(target)) return target;
+        return Number.isFinite(fallback) ? fallback : NaN;
+      }
+
+      function minToTime(minutes){
+        const safe=clampInt(minutes,0,1439,0);
+        const hours=String(Math.floor(safe/60)).padStart(2,"0");
+        const mins=String(safe%60).padStart(2,"0");
+        return hours+":"+mins;
+      }
+
+      function timeToMin(value){
+        const text=String(value||"");
+        const parts=text.split(":");
+        if(parts.length<2) return NaN;
+        const hours=Number(parts[0]);
+        const mins=Number(parts[1]);
+        if(!Number.isFinite(hours) || !Number.isFinite(mins)) return NaN;
+        if(hours<0 || hours>23 || mins<0 || mins>59) return NaN;
+        return Math.round(hours)*60+Math.round(mins);
+      }
+
+      function browserTimezoneOffsetHours(){
+        return clampInt(-new Date().getTimezoneOffset()/60,-12,14,-5);
+      }
+
+      function hostnameBaseValid(value){
+        return /^[a-z0-9](?:[a-z0-9-]{0,21}[a-z0-9])?$/.test(value);
+      }
+
+      function ipv4Valid(value){
+        if(!value) return true;
+        const parts=String(value).split(".");
+        if(parts.length!==4) return false;
+        return parts.every((part)=>/^\d{1,3}$/.test(part) && Number(part)<=255);
+      }
+
+      function renderStaticIpSummary(config){
+        if(!dom.system.staticIpSummary) return;
+        const enabled=!!(config && config.static_ip_enabled);
+        const ip=config && config.static_ip ? String(config.static_ip) : "";
+        if(enabled && ip){
+          const gw=config.static_gateway ? " · gw "+config.static_gateway : "";
+          const dns=config.static_dns ? " · dns "+config.static_dns : "";
+          setTone(dom.system.staticIpSummary,"helper section-note","","Pinned: "+ip+gw+dns);
+        }else{
+          setTone(dom.system.staticIpSummary,"helper section-note","","DHCP assigned, not pinned.");
+        }
+      }
+
+      function rgbToHex(r,g,b){
+        const rr=Math.max(0,Math.min(255,Number(r)||0)).toString(16).padStart(2,"0");
+        const gg=Math.max(0,Math.min(255,Number(g)||0)).toString(16).padStart(2,"0");
+        const bb=Math.max(0,Math.min(255,Number(b)||0)).toString(16).padStart(2,"0");
+        return "#"+rr+gg+bb;
+      }
+
+      function hexToRgb(hex){
+        const value=String(hex||"").trim().replace(/^#/,"");
+        const parsed=value.length===6 ? value : "ffffff";
+        return {
+          r:parseInt(parsed.slice(0,2),16) || 255,
+          g:parseInt(parsed.slice(2,4),16) || 255,
+          b:parseInt(parsed.slice(4,6),16) || 255
+        };
+      }
+
+      function nearestVisiblePreset(roomM3){
+        const target=Number(roomM3);
+        if(!Number.isFinite(target)) return "everyday";
+        let best="everyday";
+        let bestDistance=Number.POSITIVE_INFINITY;
+        VISIBLE_ROOM_PRESET_KEYS.forEach((key)=>{
+          const preset=ROOM_PRESETS[key];
+          const distance=Math.abs(target - preset.roomM3);
+          if(distance < bestDistance){
+            best=key;
+            bestDistance=distance;
+          }else if(Math.abs(distance - bestDistance) < 0.01 && key==="everyday"){
+            best=key;
+          }
+        });
+        return best;
+      }
+
+      function displayPresetFromStored(storedProfile,roomM3){
+        const key=String(storedProfile||"");
+        return ROOM_PRESETS[key] ? key : nearestVisiblePreset(roomM3);
+      }
+
+      function roomOverrideActive(presetKey,roomM3){
+        const preset=ROOM_PRESETS[presetKey];
+        if(!preset || !Number.isFinite(roomM3)) return false;
+        return Math.abs(roomM3 - preset.roomM3) >= 0.25;
+      }
+
+      function normalizeFanBoundsInputs(){
+        const normalizedMax=clampInt(dom.control.maxFanPercent ? dom.control.maxFanPercent.value : 100,41,100,100);
+        const normalizedMin=clampInt(dom.control.minFanPercent ? dom.control.minFanPercent.value : 40,40,99,40);
+        if(dom.control.minFanPercent) dom.control.minFanPercent.value=String(normalizedMin);
+        if(dom.control.maxFanPercent) dom.control.maxFanPercent.value=String(normalizedMax);
+        let feasible=false;
+        for(let step=1;step<=16;step++){
+          const mapped=Math.floor(((16-step)*100+7.5)/15);
+          if(mapped>=normalizedMin && mapped<=normalizedMax) feasible=true;
+        }
+        if(normalizedMin>=normalizedMax || !feasible){
+          throw new Error("No fan step fits these Auto limits. Widen the range.");
+        }
+        return {min:normalizedMin,max:normalizedMax};
+      }
+
+      function draw(canvas,data,color){
+        if(!canvas) return;
+        const width=canvas.clientWidth || 480;
+        const height=canvas.clientHeight || 140;
+        const dpr=window.devicePixelRatio || 1;
+        const backingWidth=Math.round(width*dpr);
+        const backingHeight=Math.round(height*dpr);
+        if(canvas.width!==backingWidth || canvas.height!==backingHeight){
+          canvas.width=backingWidth;
+          canvas.height=backingHeight;
+        }
+        const ctx=canvas.getContext("2d");
+        ctx.setTransform(dpr,0,0,dpr,0,0);
+        ctx.clearRect(0,0,width,height);
+        if(data.length<2) return;
+        let min=Infinity;
+        let max=-Infinity;
+        data.forEach((value)=>{
+          min=Math.min(min,value);
+          max=Math.max(max,value);
+        });
+        const range=(max-min) || 1;
+        const lastIndex=Math.max(data.length-1,1);
+        ctx.beginPath();
+        ctx.strokeStyle=color;
+        ctx.lineWidth=2;
+        data.forEach((value,index)=>{
+          const x=(index/lastIndex)*width;
+          const y=height-((value-min)/range)*(height-14)-7;
+          if(index===0) ctx.moveTo(x,y);
+          else ctx.lineTo(x,y);
+        });
+        ctx.stroke();
+      }
+
+      function pushHistory(list,value){
+        list.push(value);
+        if(list.length>MAX) list.shift();
+      }
+
+      function clampLabel(control){
+        if(!control) return "--";
+        const reason=String(control.clamp_reason || "");
+        if(reason.indexOf("max_cap")!==-1) return "max limit active";
+        const hasAch=reason.indexOf("ach")!==-1;
+        const hasCap=reason==="cap" || reason.indexOf("+cap")!==-1 || reason.indexOf("cap+")!==-1;
+        if(hasAch && hasCap) return "floor+cap";
+        if(hasAch) return "floor active";
+        if(hasCap) return "cap active";
+        if(reason.indexOf("fast response")===0) return "assist";
+        if(reason && reason!=="none") return "adjusted";
+        return "normal";
+      }
+
+      function autoFloorLabel(control){
+        if(!control) return "--";
+        if(String(control.mode||"")!=="auto") return "inactive";
+        const minPct=num(state.config && state.config.min_fan_percent);
+        const targetPct=num(control.v3_target_airflow_pct);
+        const appliedPct=num(control.v3_applied_airflow_pct);
+        const reason=String(control.v3_reason||"");
+        const floorFromReason=reason.indexOf("_floor")!==-1;
+        const floorFromCompare=Number.isFinite(minPct) && Number.isFinite(targetPct) && Number.isFinite(appliedPct) && targetPct < minPct && appliedPct >= minPct;
+        if((floorFromReason || floorFromCompare) && Number.isFinite(minPct)){
+          return "active @ "+Math.round(minPct)+"%";
+        }
+        return "inactive";
+      }
+
+      function startupLabel(control){
+        if(!control) return "--";
+        const startupState=String(control.startup_state || "--").replace(/_/g," ");
+        const result=String(control.startup_result || "none");
+        if(!control.startup_active){
+          return result && result!=="none" ? startupState+" / "+result+" (done)" : startupState+" (done)";
+        }
+        return result && result!=="none" ? startupState+" / "+result : startupState;
+      }
+
+      function hostnameLabel(data){
+        const mdns=String(data && data.mdns_host ? data.mdns_host : (window.location.hostname || "--")).trim();
+        const localIp=String(data && data.local_ip ? data.local_ip : "").trim();
+        const host=mdns && mdns!=="pending"
+          ? (mdns.endsWith(".local") ? mdns : (mdns.indexOf(".")>=0 ? mdns : mdns+".local"))
+          : (window.location.hostname || "--");
+        const parts=[];
+        if(host && host!=="--") parts.push("Hostname: "+host);
+        if(localIp && localIp!=="0.0.0.0") parts.push("IP "+localIp);
+        return parts.length ? parts.join(" · ") : "Hostname: --";
+      }
+
+      function versionLabel(data){
+        const fw=String((data && (data.firmware_version || data.fw_version || data.fw)) || "pending");
+        const build=Number(data && data.build_number);
+        return Number.isFinite(build) && build>0 ? "Build: "+fw+" (#"+build+")" : "Build: "+fw;
+      }
+
+      function currentRoomPresetKey(){
+        const stored=state.config && state.config.room_profile ? state.config.room_profile : "everyday";
+        const roomM3=num(state.config && state.config.room_m3);
+        return displayPresetFromStored(stored,roomM3);
+      }
+
+      function deriveStatusViewModel(data){
+        const sensors=data.sensors || {};
+        const control=data.control || {};
+        const fanPercent=control.fan_percent !== undefined ? Number(control.fan_percent) : fanPercentFromSpeed(control.speed);
+        const activeMode=String(control.mode||"auto");
+        const manualMode=activeMode==="manual";
+        const scheduleMode=activeMode==="schedule";
+        const autoTargetPercent=control.v3_target_airflow_pct !== undefined ? Number(control.v3_target_airflow_pct) : fanPercent;
+        const scheduleTargetPercent=control.schedule_target_pct !== undefined ? Number(control.schedule_target_pct) : NaN;
+        const summaryTargetVisible=!manualMode;
+        const summaryTargetLabel=scheduleMode ? "Schedule target" : "Auto target";
+        const summaryTargetPercent=scheduleMode ? scheduleTargetPercent : autoTargetPercent;
+        const pmAvailable=control.pm_telemetry_available !== false;
+        const qualityText="VOC "+rounded(sensors.voc_kalman!==undefined ? sensors.voc_kalman : sensors.voc)+" / PM2.5 "+(pmAvailable ? fixed(sensors.pm25,1) : "--");
+        return {
+          data:data,
+          sensors:sensors,
+          control:control,
+          activeMode:activeMode,
+          manualMode:manualMode,
+          fanPercent:fanPercent,
+          summaryTargetVisible:summaryTargetVisible,
+          summaryTargetLabel:summaryTargetLabel,
+          summaryTargetPercent:summaryTargetPercent,
+          autoTargetPercent:autoTargetPercent,
+          scheduleTargetPercent:scheduleTargetPercent,
+          qualityText:qualityText,
+          fanReady:control.fan_ready !== undefined ? !!control.fan_ready : (control.actuation_ready !== undefined ? !!control.actuation_ready : true)
+        };
+      }
+
+      const render={
+        toast:function(message,type){
+          if(!dom.toast) return;
+          dom.toast.textContent=message;
+          dom.toast.className="toast "+(type==="err" ? "err" : "ok")+" show";
+          clearTimeout(state.ui.toastTimer);
+          state.ui.toastTimer=setTimeout(()=>{
+            dom.toast.className="toast";
+          },3500);
+        },
+        mode:function(mode){
+          const manual=mode==="manual";
+          dom.control.auto.className=manual ? "" : "active";
+          dom.control.manual.className=manual ? "active" : "";
+          dom.control.manualPanel.className=manual ? "section-copy" : "section-copy hidden";
+        },
+        roomPreset:function(key,options){
+          const settings=options || {};
+          const preset=ROOM_PRESETS[key] || ROOM_PRESETS.everyday;
+          if(dom.room.custom) dom.room.custom.open=!!settings.openAdvanced;
+          if(dom.room.roomM3 && !settings.preserveRoomM3){
+            dom.room.roomM3.value=String(preset.roomM3);
+          }
+          const roomValue=num(dom.room.roomM3 ? dom.room.roomM3.value : NaN);
+          const override=roomOverrideActive(key,roomValue);
+          setText(dom.room.profileSummary,preset.label);
+          setText(dom.room.note,preset.note);
+          setText(dom.room.roomSummary,Number.isFinite(roomValue) ? roomValue.toFixed(1)+" m\u00B3" : "--");
+          if(dom.room.overrideNote){
+            dom.room.overrideNote.textContent="custom room size active";
+            dom.room.overrideNote.className=override ? "meta warn section-note" : "meta hidden section-note";
+          }
+          return {overrideActive:override,preset:preset};
+        },
+        ledState:function(){
+          if(!dom.led.color) return;
+          const enabled=dom.led.enabled ? !!dom.led.enabled.checked : true;
+          const custom=dom.led.customEnabled ? !!dom.led.customEnabled.checked : false;
+          if(dom.led.customEnabled) dom.led.customEnabled.disabled=!enabled;
+          dom.led.color.disabled=!enabled || !custom;
+          if(dom.led.preview) dom.led.preview.style.background=dom.led.color.value || "#ffffff";
+          if(dom.led.inlinePicker) dom.led.inlinePicker.classList.toggle("hidden", !enabled || !custom);
+        },
+        mqttStatus:function(data){
+          if(!dom.mqtt.liveStatus) return;
+          const line=(tone,text)=>setTone(dom.mqtt.liveStatus,"meta mqtt-status-line section-note",tone,text);
+          const enabled=data && data.mqtt_enabled !== undefined ? !!data.mqtt_enabled : !!(dom.mqtt.enabled && dom.mqtt.enabled.checked);
+          const connected=data && data.mqtt_connected !== undefined ? !!data.mqtt_connected : false;
+          const broker=data && data.mqtt_broker_ip ? String(data.mqtt_broker_ip) : (dom.mqtt.brokerIp ? dom.mqtt.brokerIp.value.trim() : "");
+          const port=data && data.mqtt_port !== undefined ? data.mqtt_port : (dom.mqtt.port ? dom.mqtt.port.value : "1883");
+          if(!enabled){
+            line("","MQTT status: disabled");
+            return;
+          }
+          if(!broker){
+            line("warn","MQTT status: enabled, broker not set");
+            return;
+          }
+          if(connected){
+            line("good","MQTT status: connected to "+broker+":"+port);
+            return;
+          }
+          line("warn","MQTT status: configured for "+broker+":"+port+" but not connected");
+        },
+        configFeedback:function(text,tone){
+          setTone(dom.system.configStatus,"meta section-note",tone||"",text||"");
+        },
+        roomFeedback:function(text,tone){
+          setTone(dom.room.roomSaveStatus,"meta section-note",tone||"",text||"");
+        },
+        mqttTestFeedback:function(text,tone){
+          setTone(dom.mqtt.testStatus,"meta section-note",tone||"",text||"");
+        },
+        streamBadge:function(){
+          const now=Date.now();
+          if(state.transport.sseConnected){
+            if(state.transport.sseLastTs && (now-state.transport.sseLastTs)<6000){
+              dom.streamStatus.textContent="Live";
+              dom.streamStatus.className="pill live";
+              return;
+            }
+            if(state.transport.restLastTs && (now-state.transport.restLastTs)<6000){
+              dom.streamStatus.textContent="Live";
+              dom.streamStatus.className="pill live";
+              return;
+            }
+            if(state.transport.restLastTs){
+              dom.streamStatus.textContent="Connected";
+              dom.streamStatus.className="pill warn";
+              return;
+            }
+            dom.streamStatus.textContent="Waiting for events";
+            dom.streamStatus.className="pill warn";
+            return;
+          }
+          if(state.transport.restLastTs && (now-state.transport.restLastTs)<6000){
+            dom.streamStatus.textContent="Polling";
+            dom.streamStatus.className="pill warn";
+            return;
+          }
+          if(state.transport.sseLastTs){
+            const seconds=Math.round((now-state.transport.sseLastTs)/1000);
+            dom.streamStatus.textContent="Reconnecting ("+seconds+"s ago)";
+            dom.streamStatus.className="pill warn";
+            return;
+          }
+          dom.streamStatus.textContent="Reconnecting...";
+          dom.streamStatus.className="pill warn";
+        },
+        status:function(vm){
+          if(vm.manualMode){
+            const remembered=manualCommandPercentFromControl(vm.control,NaN);
+            if(Number.isFinite(remembered)) state.ui.lastManualCommandPercent=remembered;
+          }
+          setText(dom.summary.hostname,hostnameLabel(vm.data));
+          setText(dom.summary.version,versionLabel(vm.data));
+          setText(dom.summary.quality,vm.qualityText);
+          setText(dom.summary.mode,String(vm.control.mode || "--").toUpperCase());
+          setText(dom.summary.output,Number.isFinite(vm.fanPercent) ? Math.round(vm.fanPercent)+"%" : "--");
+          setText(dom.summary.rpm,(vm.control.rpm_valid===false || vm.control.rpm_fresh===false) ? "Unavailable" : rounded(vm.control.rpm_actual!==undefined ? vm.control.rpm_actual : vm.data.rpm_actual));
+          if(dom.summary.targetCard) dom.summary.targetCard.classList.toggle("hidden", !vm.summaryTargetVisible);
+          if(vm.summaryTargetVisible){
+            setText(dom.summary.targetLabel,vm.summaryTargetLabel);
+            setText(dom.summary.target,Number.isFinite(vm.summaryTargetPercent) ? Math.round(vm.summaryTargetPercent)+"%" : "--");
+          }
+          if(dom.summary.startupCard) dom.summary.startupCard.classList.toggle("hidden", !vm.control.startup_active);
+          setText(dom.summary.startup,startupLabel(vm.control));
+          setText(dom.summary.clamp,autoFloorLabel(vm.control));
+          if(dom.system.mdnsActiveHost) dom.system.mdnsActiveHost.textContent=vm.data && vm.data.mdns_host ? vm.data.mdns_host : "--";
+          if(dom.schedule.activeStatus) setTone(dom.schedule.activeStatus,"meta",vm.control.schedule_active ? "good" : "",vm.control.schedule_active ? "Active now" : "");
+          render.mode(vm.control.mode || "auto");
+          dom.control.auto.disabled=!vm.fanReady;
+          dom.control.manual.disabled=!vm.fanReady;
+          dom.control.manualSlider.disabled=!vm.fanReady;
+          if(!state.ui.sliderActive && state.ui.pendingWrites===0){
+            const sliderValue=vm.manualMode
+              ? manualCommandPercentFromControl(vm.control,state.ui.lastManualCommandPercent)
+              : vm.fanPercent;
+            if(Number.isFinite(sliderValue)){
+              dom.control.manualSlider.value=String(Math.round(sliderValue));
+              dom.control.manualVal.textContent=Math.round(sliderValue)+"%";
+            }
+          }
+          if(dom.control.holdStatus){
+            const held=num(state.ui.lastManualCommandPercent);
+            dom.control.holdStatus.textContent=vm.manualMode && Number.isFinite(held)
+              ? "Manual override holding "+Math.round(held)+"% until Auto is selected."
+              : "";
+          }
+        },
+        telemetry:function(vm){
+          setText(dom.telemetry.voc,rounded(vm.sensors.voc_kalman!==undefined ? vm.sensors.voc_kalman : vm.sensors.voc));
+          setText(dom.telemetry.vel,(Number(vm.sensors.voc_velocity)>=0 ? "+" : "")+fixed(vm.sensors.voc_velocity,1));
+          setText(dom.telemetry.pm25,fixed(vm.sensors.pm25,1));
+          setText(dom.telemetry.eco2,rounded(vm.sensors.eco2));
+          setText(dom.telemetry.temp,fixed(vm.sensors.temp_c,1));
+          setText(dom.telemetry.rh,rounded(vm.sensors.rh_pct));
+          const vocNow=num(vm.sensors.voc_kalman!==undefined ? vm.sensors.voc_kalman : vm.sensors.voc);
+          if(Number.isFinite(vocNow)) pushHistory(state.history.voc,vocNow);
+          const pmNow=num(vm.sensors.pm25);
+          if(Number.isFinite(pmNow)) pushHistory(state.history.pm,pmNow);
+          const eco2Now=num(vm.sensors.eco2);
+          if(Number.isFinite(eco2Now)) pushHistory(state.history.eco2,eco2Now);
+          draw(dom.telemetry.chartVoc,state.history.voc,"#57d6ff");
+          draw(dom.telemetry.chartPm,state.history.pm,"#ffc26a");
+          draw(dom.telemetry.chartEco2,state.history.eco2,"#ff7d7d");
+          setText(dom.telemetry.chartVocMeta,chartMetaLabel(state.history.voc,0));
+          setText(dom.telemetry.chartPmMeta,chartMetaLabel(state.history.pm,1));
+          setText(dom.telemetry.chartEco2Meta,chartMetaLabel(state.history.eco2,0));
+        }
+      };
+
+      function chartMetaLabel(list,digits){
+        if(!list.length) return "";
+        let min=Infinity;
+        let max=-Infinity;
+        list.forEach((value)=>{
+          min=Math.min(min,value);
+          max=Math.max(max,value);
+        });
+        const now=list[list.length-1];
+        return min.toFixed(digits)+"–"+max.toFixed(digits)+" · now "+now.toFixed(digits);
+      }
+
+      const form={
+        hydrateConfig:function(config){
+          CONFIG_FIELDS.forEach((field)=>{
+            if(!field.node) return;
+            const value=config[field.key]!==undefined ? config[field.key] : field.defaultValue;
+            field.node.value=value;
+          });
+          const roomM3=num(config.room_m3);
+          const presetKey=displayPresetFromStored(config.room_profile,roomM3);
+          if(dom.room.profile) dom.room.profile.value=presetKey;
+          if(dom.room.roomM3) dom.room.roomM3.value=config.room_m3!==undefined ? config.room_m3 : "";
+          if(dom.led.enabled) dom.led.enabled.checked=config.led_enabled !== undefined ? !!config.led_enabled : true;
+          if(dom.led.customEnabled) dom.led.customEnabled.checked=!!config.led_custom_color_enabled;
+          if(dom.led.color){
+            dom.led.color.value=(config.led_color_r!==undefined && config.led_color_g!==undefined && config.led_color_b!==undefined)
+              ? rgbToHex(config.led_color_r,config.led_color_g,config.led_color_b)
+              : "#ffffff";
+          }
+          if(dom.mqtt.pass){
+            dom.mqtt.pass.value="";
+            dom.mqtt.pass.placeholder=config.mqtt_pass_set ? "Saved on device" : "leave blank to keep";
+          }
+          if(dom.mqtt.enabled) dom.mqtt.enabled.checked=!!config.mqtt_enabled;
+          if(dom.schedule.timezoneDisplay){
+            const tz=browserTimezoneOffsetHours();
+            dom.schedule.timezoneDisplay.textContent="Timezone: UTC"+(tz>=0 ? "+" : "")+tz+" (from browser, synced on save)";
+          }
+          if(dom.schedule.enabled) dom.schedule.enabled.checked=!!config.schedule_enabled;
+          if(dom.schedule.start) dom.schedule.start.value=minToTime(config.schedule_start_min!==undefined ? config.schedule_start_min : 1320);
+          if(dom.schedule.end) dom.schedule.end.value=minToTime(config.schedule_end_min!==undefined ? config.schedule_end_min : 420);
+          if(dom.schedule.pct){
+            dom.schedule.pct.value=String(clampInt(config.schedule_fan_percent!==undefined ? config.schedule_fan_percent : 35,0,100,35));
+            if(dom.schedule.pctLabel) dom.schedule.pctLabel.textContent=dom.schedule.pct.value;
+          }
+          if(dom.system.staticIpEnabled) dom.system.staticIpEnabled.checked=!!config.static_ip_enabled;
+          renderStaticIpSummary(config);
+          return presetKey;
+        },
+        serializeRoomConfig:function(){
+          const payload={
+            room_profile:dom.room.profile ? dom.room.profile.value : "everyday",
+            room_m3:Number(dom.room.roomM3 ? dom.room.roomM3.value : NaN)
+          };
+          Object.keys(payload).forEach((key)=>{
+            if(Number.isNaN(payload[key])) delete payload[key];
+          });
+          return payload;
+        },
+        serializeLimits:function(){
+          const fanBounds=normalizeFanBoundsInputs();
+          return {min_fan_percent:fanBounds.min,max_fan_percent:fanBounds.max};
+        },
+        serializeLed:function(){
+          const ledRgb=dom.led.color ? hexToRgb(dom.led.color.value) : {r:255,g:255,b:255};
+          return {
+            led_enabled:!!(dom.led.enabled && dom.led.enabled.checked),
+            led_custom_color_enabled:!!(dom.led.customEnabled && dom.led.customEnabled.checked),
+            led_color_r:ledRgb.r,
+            led_color_g:ledRgb.g,
+            led_color_b:ledRgb.b
+          };
+        },
+        serializeSchedule:function(){
+          const scheduleStart=timeToMin(dom.schedule.start ? dom.schedule.start.value : "22:00");
+          const scheduleEnd=timeToMin(dom.schedule.end ? dom.schedule.end.value : "07:00");
+          const payload={
+            schedule_enabled:!!(dom.schedule.enabled && dom.schedule.enabled.checked),
+            schedule_start_min:Number.isFinite(scheduleStart) ? scheduleStart : 1320,
+            schedule_end_min:Number.isFinite(scheduleEnd) ? scheduleEnd : 420,
+            schedule_fan_percent:clampInt(dom.schedule.pct ? dom.schedule.pct.value : 35,0,100,35),
+            timezone_offset_hours:browserTimezoneOffsetHours()
+          };
+          if(payload.schedule_enabled && payload.schedule_start_min===payload.schedule_end_min){
+            throw new Error("Schedule start and end cannot be the same time.");
+          }
+          return payload;
+        },
+        serializeNetwork:function(){
+          const payload={
+            hostname_base:dom.system.hostnameBase ? dom.system.hostnameBase.value.trim().toLowerCase() : "localair",
+            static_ip_enabled:!!(dom.system.staticIpEnabled && dom.system.staticIpEnabled.checked),
+            static_ip:dom.system.staticIp ? dom.system.staticIp.value.trim() : "",
+            static_netmask:dom.system.staticNetmask ? dom.system.staticNetmask.value.trim() : "",
+            static_gateway:dom.system.staticGateway ? dom.system.staticGateway.value.trim() : "",
+            static_dns:dom.system.staticDns ? dom.system.staticDns.value.trim() : ""
+          };
+          if(!hostnameBaseValid(payload.hostname_base)){
+            throw new Error("Invalid hostname.");
+          }
+          ["static_ip","static_netmask","static_gateway","static_dns"].forEach((key)=>{
+            if(!ipv4Valid(payload[key])){
+              throw new Error("Invalid network address in "+key.replace(/_/g," ")+".");
+            }
+          });
+          return payload;
+        },
+        serializeMqtt:function(forceClearAuth){
+          const payload={
+            mqtt_broker_ip:dom.mqtt.brokerIp ? dom.mqtt.brokerIp.value.trim() : "",
+            mqtt_port:Number(dom.mqtt.port ? dom.mqtt.port.value : ""),
+            mqtt_enabled:!!(dom.mqtt.enabled && dom.mqtt.enabled.checked)
+          };
+          if(!payload.mqtt_broker_ip) payload.mqtt_broker_clear=true;
+          if(dom.mqtt.user && dom.mqtt.user.value.trim()) payload.mqtt_user=dom.mqtt.user.value.trim();
+          if(dom.mqtt.pass && dom.mqtt.pass.value.length) payload.mqtt_pass=dom.mqtt.pass.value;
+          if(forceClearAuth){
+            payload.mqtt_user_clear=true;
+            payload.mqtt_pass_clear=true;
+            delete payload.mqtt_user;
+            delete payload.mqtt_pass;
+          }
+          Object.keys(payload).forEach((key)=>{
+            if(Number.isNaN(payload[key])) delete payload[key];
+          });
+          return payload;
+        }
+      };
+
+      const api={
+        getStatus:async function(){
+          const res=await fetch("/api/status");
+          if(!res.ok) throw new Error("/api/status failed ("+res.status+")");
+          return res.json();
+        },
+        getConfig:async function(){
+          const res=await fetch("/api/config");
+          if(!res.ok) throw new Error("/api/config failed ("+res.status+")");
+          return res.json();
+        },
+        postJSONOnce:async function(path,payload){
+          const options={method:"POST"};
+          if(payload!==undefined){
+            options.headers={"Content-Type":"application/json"};
+            options.body=JSON.stringify(payload);
+          }
+          const res=await fetch(path,options);
+          const text=await res.text();
+          if(!res.ok) throw new Error(path+" failed ("+res.status+"): "+text);
+          try{
+            return text ? JSON.parse(text) : {ok:true};
+          }catch(_){
+            return {ok:true};
+          }
+        },
+        postJSON:async function(path,payload,options){
+          state.ui.pendingWrites++;
+          try{
+            try{
+              return await api.postJSONOnce(path,payload);
+            }catch(err){
+              const retryAllowed=options && options.retryTransient;
+              const transient=err instanceof TypeError || String(err).indexOf("Failed to fetch")!==-1;
+              if(!retryAllowed || !transient) throw err;
+              await new Promise((resolve)=>setTimeout(resolve,275));
+              return await api.postJSONOnce(path,payload);
+            }
+          }finally{
+            state.ui.pendingWrites--;
+          }
+        }
+      };
+
+      const SAVE_GROUPS={
+        limits:{
+          serialize:function(){return form.serializeLimits();},
+          feedback:function(text,tone){setTone(dom.control.limitsSaveStatus,"meta section-note",tone,text);}
+        },
+        led:{
+          serialize:function(){return form.serializeLed();},
+          feedback:function(text,tone){setTone(dom.led.saveStatus,"meta section-note",tone,text);},
+          after:function(){render.ledState();}
+        },
+        schedule:{
+          serialize:function(){return form.serializeSchedule();},
+          feedback:function(text,tone){setTone(dom.schedule.saveStatus,"meta section-note",tone,text);}
+        },
+        room:{
+          serialize:function(){return form.serializeRoomConfig();},
+          feedback:function(text,tone){render.roomFeedback(text,tone);},
+          after:function(result){
+            const key=result && result.room_profile ? displayPresetFromStored(result.room_profile,result.room_m3) : (dom.room.profile ? dom.room.profile.value : "everyday");
+            if(dom.room.profile) dom.room.profile.value=key;
+            render.roomPreset(key,{preserveRoomM3:true});
+          }
+        },
+        network:{
+          serialize:function(){return form.serializeNetwork();},
+          feedback:function(text,tone){render.configFeedback(text,tone);},
+          after:function(result){
+            renderStaticIpSummary(result);
+            actions.refreshStatus().catch(()=>{});
+          }
+        },
+        mqtt:{
+          serialize:function(){return form.serializeMqtt(false);},
+          feedback:function(text,tone){render.mqttTestFeedback(text,tone);},
+          after:function(result,payload){
+            render.mqttStatus(Object.assign({}, result || {}, payload));
+            if(dom.mqtt.pass && result && result.mqtt_pass_set!==undefined){
+              dom.mqtt.pass.value="";
+              dom.mqtt.pass.placeholder=result.mqtt_pass_set ? "Saved on device" : "leave blank to keep";
+            }
+          }
+        }
+      };
+
+      const actions={
+        saveGroup:async function(name){
+          const group=SAVE_GROUPS[name];
+          const payload=group.serialize();
+          const result=await api.postJSON("/api/config",payload);
+          state.config=result;
+          if(group.after) group.after(result,payload);
+          return result;
+        },
+        queueSave:function(name,delay){
+          const group=SAVE_GROUPS[name];
+          clearTimeout(state.ui.saveTimers[name]);
+          state.ui.saveTimers[name]=setTimeout(()=>{
+            actions.saveGroup(name).then(()=>{
+              group.feedback("Saved "+new Date().toLocaleTimeString()+".","good");
+            }).catch((err)=>{
+              group.feedback(String(err),"bad");
+              render.toast(String(err),"err");
+            });
+          },delay===undefined ? 400 : delay);
+        },
+        handleStatus:function(data,source){
+          state.status=data;
+          if(source==="sse") state.transport.sseLastTs=Date.now();
+          if(source==="rest") state.transport.restLastTs=Date.now();
+          const vm=deriveStatusViewModel(data);
+          render.status(vm);
+          render.telemetry(vm);
+          render.mqttStatus(Object.assign({}, state.config || {}, vm.control));
+          render.streamBadge();
+        },
+        refreshStatus:async function(){
+          const data=await api.getStatus();
+          actions.handleStatus(data,"rest");
+        },
+        refreshConfig:async function(){
+          try{
+            const config=await api.getConfig();
+            state.config=config;
+            const presetKey=form.hydrateConfig(config);
+            const roomState=render.roomPreset(presetKey,{preserveRoomM3:true});
+            render.roomFeedback("Room policy loaded: "+roomState.preset.label+(roomState.overrideActive ? " (custom room size active)" : ""),"");
+            render.ledState();
+            render.mqttStatus(config);
+          }catch(err){
+            render.configFeedback(String(err),"bad");
+          }
+        },
+        refreshAll:async function(){
+          await Promise.allSettled([actions.refreshConfig(), actions.refreshStatus()]);
+        },
+        clearMqttAuth:async function(){
+          if(dom.mqtt.user) dom.mqtt.user.value="";
+          if(dom.mqtt.pass) dom.mqtt.pass.value="";
+          const payload=form.serializeMqtt(true);
+          const result=await api.postJSON("/api/config",payload);
+          state.config=result;
+          SAVE_GROUPS.mqtt.after(result,payload);
+          render.mqttTestFeedback("MQTT credentials cleared.","good");
+        },
+        testMqtt:async function(){
+          const payload=form.serializeMqtt(false);
+          if(!payload.mqtt_broker_ip){
+            render.mqttTestFeedback("Enter a broker host/IP first.","warn");
+            return;
+          }
+          render.mqttTestFeedback("Testing MQTT...","");
+          const result=await api.postJSON("/api/mqtt/test",payload);
+          const message=result && result.message ? String(result.message) : (result && result.ok ? "MQTT connected" : "MQTT test failed");
+          render.mqttTestFeedback(message,result && result.ok ? "good" : "warn");
+        },
+        setAuto:async function(){
+          const result=await api.postJSON("/api/fan/auto",undefined,{retryTransient:true});
+          state.ui.lastManualCommandPercent=null;
+          if(result && result.mode) render.mode(result.mode);
+          render.toast("Switched to Auto","ok");
+          if(!state.transport.sseConnected) await actions.refreshStatus();
+        },
+        setManual:async function(){
+          state.ui.sliderActive=true;
+          const percentage=parseInt(dom.control.manualSlider.value,10);
+          state.ui.lastManualCommandPercent=percentage;
+          try{
+            const result=await api.postJSON("/api/fan/percentage",{percentage:percentage},{retryTransient:true});
+            if(result && result.mode) render.mode(result.mode);
+            render.toast("Manual fan command "+percentage+"% accepted","ok");
+            if(!state.transport.sseConnected) await actions.refreshStatus();
+          }catch(err){
+            if(state.status && state.status.control && state.status.control.speed!==undefined){
+              const fallback=state.status.control.fan_percent !== undefined
+                ? Math.round(Number(state.status.control.fan_percent))
+                : Math.round(fanPercentFromSpeed(state.status.control.speed));
+              dom.control.manualSlider.value=String(fallback);
+              dom.control.manualVal.textContent=String(fallback)+"%";
+            }
+            render.toast(String(err),"err");
+          }finally{
+            state.ui.sliderActive=false;
+          }
+        },
+        pollStatusIfNeeded:async function(){
+          const now=Date.now();
+          const interval=2000;
+          if(state.transport.statusPollInFlight || (now-state.transport.lastStatusPollAttempt)<interval){
+            render.streamBadge();
+            return;
+          }
+          state.transport.statusPollInFlight=true;
+          state.transport.lastStatusPollAttempt=now;
+          try{
+            await actions.refreshStatus();
+          }catch(_){
+          }finally{
+            state.transport.statusPollInFlight=false;
+            render.streamBadge();
+          }
+        },
+        connectSse:function(){
+          try{
+            if(state.transport.eventSource) state.transport.eventSource.close();
+            state.transport.eventSource=new EventSource("/stream");
+            state.transport.eventSource.onopen=function(){
+              state.transport.sseConnected=true;
+              render.streamBadge();
+            };
+            state.transport.eventSource.onerror=function(){
+              state.transport.sseConnected=false;
+              render.streamBadge();
+            };
+            state.transport.eventSource.onmessage=function(event){
+              try{
+                actions.handleStatus(JSON.parse(event.data),"sse");
+              }catch(_){
+              }
+            };
+          }catch(_){
+            dom.streamStatus.textContent="SSE unavailable";
+            dom.streamStatus.className="pill bad";
+          }
+        },
+        schedulePolls:function(){
+          setInterval(actions.pollStatusIfNeeded,1000);
+          setInterval(render.streamBadge,2000);
+        },
+        seedHistory:async function(){
+          try{
+            const res=await fetch("/api/history");
+            if(!res.ok) return;
+            const rows=await res.json();
+            if(!Array.isArray(rows) || state.history.voc.length>2) return;
+            rows.slice(0,MAX).reverse().forEach((row)=>{
+              const voc=num(row.voc);
+              const pm=num(row.pm25);
+              if(Number.isFinite(voc)) pushHistory(state.history.voc,voc);
+              if(Number.isFinite(pm)) pushHistory(state.history.pm,pm);
+            });
+          }catch(_){
+          }
+        },
+        boot:async function(){
+          bindEvents();
+          actions.connectSse();
+          await actions.seedHistory();
+          await actions.refreshAll();
+          actions.schedulePolls();
+        }
+      };
+
+      function bindManualControls(){
+        const manualSlider=dom.control.manualSlider;
+        manualSlider.addEventListener("input",()=>{
+          dom.control.manualVal.textContent=manualSlider.value+"%";
+        });
+        manualSlider.addEventListener("pointerdown",()=>{
+          state.ui.sliderActive=true;
+        });
+        manualSlider.addEventListener("pointerup",()=>{
+          clearTimeout(state.ui.manualDebounce);
+          state.ui.manualDebounce=setTimeout(actions.setManual,80);
+        });
+        manualSlider.addEventListener("focus",()=>{
+          state.ui.sliderActive=true;
+        });
+        manualSlider.addEventListener("change",()=>{
+          clearTimeout(state.ui.manualDebounce);
+          state.ui.manualDebounce=setTimeout(actions.setManual,80);
+        });
+        manualSlider.addEventListener("blur",()=>{
+          state.ui.sliderActive=false;
+        });
+        dom.control.auto.addEventListener("click",()=>{
+          actions.setAuto().catch((err)=>{
+            render.toast(String(err),"err");
+          });
+        });
+        dom.control.manual.addEventListener("click",()=>{
+          actions.setManual().catch((err)=>{
+            render.toast(String(err),"err");
+          });
+        });
+        [dom.control.maxFanPercent,dom.control.minFanPercent].forEach((node)=>{
+          if(node){
+            node.addEventListener("change",()=>{
+              actions.queueSave("limits");
+            });
+          }
+        });
+      }
+
+      function bindRoomControls(){
+        if(dom.room.profile){
+          dom.room.profile.addEventListener("change",()=>{
+            const key=dom.room.profile.value;
+            render.roomPreset(key,{preserveRoomM3:false,openAdvanced:false});
+            actions.queueSave("room");
+          });
+        }
+        if(dom.room.roomM3){
+          dom.room.roomM3.addEventListener("input",()=>{
+            const key=dom.room.profile ? dom.room.profile.value : "everyday";
+            render.roomPreset(key,{preserveRoomM3:true,openAdvanced:true});
+            actions.queueSave("room",700);
+          });
+        }
+      }
+
+      function bindLedControls(){
+        [dom.led.enabled,dom.led.customEnabled].forEach((node)=>{
+          if(node){
+            node.addEventListener("change",()=>{
+              render.ledState();
+              actions.queueSave("led");
+            });
+          }
+        });
+        if(dom.led.color){
+          dom.led.color.addEventListener("input",()=>{
+            render.ledState();
+          });
+          dom.led.color.addEventListener("blur",()=>{
+            render.ledState();
+            actions.queueSave("led");
+          });
+        }
+      }
+
+      function bindScheduleControls(){
+        if(dom.schedule.pct){
+          dom.schedule.pct.addEventListener("input",()=>{
+            if(dom.schedule.pctLabel) dom.schedule.pctLabel.textContent=dom.schedule.pct.value;
+          });
+          dom.schedule.pct.addEventListener("change",()=>{
+            actions.queueSave("schedule");
+          });
+        }
+        [dom.schedule.enabled,dom.schedule.start,dom.schedule.end].forEach((node)=>{
+          if(node){
+            node.addEventListener("change",()=>{
+              actions.queueSave("schedule");
+            });
+          }
+        });
+      }
+
+      function bindMqttControls(){
+        [dom.mqtt.brokerIp,dom.mqtt.port,dom.mqtt.user,dom.mqtt.pass,dom.mqtt.enabled].forEach((node)=>{
+          if(node){
+            node.addEventListener("change",()=>{
+              actions.queueSave("mqtt");
+            });
+          }
+        });
+        if(dom.mqtt.clearAuth){
+          dom.mqtt.clearAuth.addEventListener("click",()=>{
+            actions.clearMqttAuth().catch((err)=>{
+              render.mqttTestFeedback(String(err),"bad");
+            });
+          });
+        }
+        if(dom.mqtt.test){
+          dom.mqtt.test.addEventListener("click",()=>{
+            actions.testMqtt().catch((err)=>{
+              render.mqttTestFeedback(String(err),"bad");
+            });
+          });
+        }
+      }
+
+      function bindSystemControls(){
+        [dom.system.staticIpEnabled,dom.system.staticIp,dom.system.staticNetmask,dom.system.staticGateway,dom.system.staticDns].forEach((node)=>{
+          if(node){
+            node.addEventListener("change",()=>{
+              actions.queueSave("network");
+            });
+          }
+        });
+        if(dom.system.hostnameBase){
+          dom.system.hostnameBase.addEventListener("input",()=>{
+            const value=dom.system.hostnameBase.value.trim().toLowerCase();
+            render.configFeedback(value && !hostnameBaseValid(value) ? "Invalid hostname." : "", value && !hostnameBaseValid(value) ? "bad" : "");
+          });
+          dom.system.hostnameBase.addEventListener("change",()=>{
+            actions.queueSave("network");
+          });
+        }
+      }
+
+      function bindEvents(){
+        bindManualControls();
+        bindRoomControls();
+        bindLedControls();
+        bindScheduleControls();
+        bindMqttControls();
+        bindSystemControls();
+      }
+
+      window.addEventListener("beforeunload",()=>{
+        if(state.transport.eventSource) state.transport.eventSource.close();
+      });
+
+      actions.boot();
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+name: Bug report
+description: Something is wrong with LocalAir on an F00053AA Aura Air Rev 1.0.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not post Wi-Fi credentials, access tokens, Particle device IDs, or private IP addresses.
+        Report security issues privately; see SECURITY.md.
+  - type: checkboxes
+    id: hardware
+    attributes:
+      label: Hardware
+      options:
+        - label: This is an F00053AA Aura Air Rev 1.0.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Firmware version
+      description: "`firmware_version` from `/api/status` or the dashboard header, for example `localair-rev1+b56`."
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you flash it?
+      options:
+        - OTA with particle flash
+        - USB with particle flash --local
+        - Built from source
+        - Not flashed yet
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, what you saw, and the status LED color if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: textarea
+    id: boot
+    attributes:
+      label: Boot diagnostics
+      description: Output of `http://<device>/api/debug/boot`, if the dashboard is reachable.
+      render: json
