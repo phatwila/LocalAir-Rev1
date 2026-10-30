@@ -165,6 +165,7 @@ private:
         float voc_rise_score;
         bool rate_limit_initialized;
         uint32_t last_downshift_ms;
+        bool last_downshift_valid;
     };
 
     InternalState _state;

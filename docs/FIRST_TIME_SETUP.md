@@ -179,7 +179,7 @@ particle device rename <device-id> localair-1
 
 ## Download and verify the firmware
 
-From the [v1.0.0 release](https://github.com/phatwila/LocalAir-Rev1/releases/tag/v1.0.0),
+From the [v1.1.0 release](https://github.com/phatwila/LocalAir-Rev1/releases/tag/v1.1.0),
 download `localair-rev1.bin`, `SHA256SUMS`, and `release-info.json` into one
 folder. Open a terminal in that folder and check them:
 
@@ -216,7 +216,7 @@ Particle cloud upgrades Device OS automatically:
    particle get <device-id> localIP
    ```
 
-   `FW_VER` should match the release, for example `localair-rev1+b56`.
+   `FW_VER` should match the release, for example `localair-rev1+b61`.
 
 2. Open the dashboard at `http://localair.local/`. If your computer cannot
    resolve `.local` names, open `http://<device-ip>/` using the `localIP` value.

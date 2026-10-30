@@ -122,3 +122,16 @@ CommandSupervisor::CommandRecord acceptControlRequest(
     ConfigStore::saveControlState(&state);
     return command;
 }
+
+bool persistAutoAfterManualEnds(bool manual_active, bool* was_manual) {
+    if (!was_manual) return false;
+    const bool ended = *was_manual && !manual_active;
+    *was_manual = manual_active;
+    if (!ended) return false;
+    PersistedControlState state{};
+    state.mode = CONTROL_STATE_AUTO;
+    state.manual_percent = 0;
+    state.manual_speed = fanSpeedFromPercent(0, 1, 16);
+    ConfigStore::saveControlState(&state);
+    return true;
+}

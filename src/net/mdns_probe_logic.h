@@ -25,13 +25,25 @@ inline bool mdnsFormatCandidateName(char* out, size_t out_len,
                                     const char* base_name, uint16_t suffix) {
     if (!out || out_len == 0 || !base_name || !base_name[0]) return false;
     if (suffix == 0) {
-        strncpy(out, base_name, out_len - 1);
-        out[out_len - 1] = '\0';
+        const size_t len = strlen(base_name);
+        if (len >= out_len) return false;
+        memcpy(out, base_name, len + 1);
     } else {
-        snprintf(out, out_len, "%s-%u", base_name, (unsigned)suffix);
+        char tail[8];
+        const int tail_len = snprintf(tail, sizeof(tail), "-%u", (unsigned)suffix);
+        if (tail_len <= 0 || (size_t)tail_len >= out_len) return false;
+        const size_t base_len = strlen(base_name);
+        size_t keep = base_len < out_len - 1 - (size_t)tail_len
+            ? base_len : out_len - 1 - (size_t)tail_len;
+        if (keep == 0) return false;
+        if (keep + (size_t)tail_len == base_len &&
+            memcmp(base_name + keep, tail, (size_t)tail_len) == 0) {
+            if (--keep == 0) return false;
+        }
+        memcpy(out, base_name, keep);
+        memcpy(out + keep, tail, (size_t)tail_len + 1);
     }
-    const size_t len = strlen(out);
-    return len > 0 && len < out_len;
+    return true;
 }
 
 inline bool mdnsCiEqual(char a, char b) {

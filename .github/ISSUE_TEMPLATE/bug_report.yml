@@ -18,7 +18,7 @@ body:
     id: version
     attributes:
       label: Firmware version
-      description: "`firmware_version` from `/api/status` or the dashboard header, for example `localair-rev1+b56`."
+      description: "`firmware_version` from `/api/status` or the dashboard header, for example `localair-rev1+b61`."
     validations:
       required: true
   - type: dropdown

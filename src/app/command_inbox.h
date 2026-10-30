@@ -57,3 +57,8 @@ private:
 // the owner's startup/status/audit updates. No network or hardware I/O occurs.
 CommandSupervisor::CommandRecord acceptControlRequest(
     CommandSupervisor& supervisor, const CommandInbox::Request& request, uint32_t now_ms);
+
+// Saves Auto when manual control ends without an accepted request, such as an
+// apply timeout, apply failure, or backend rollback. Boot restore then matches
+// the live intent. Returns true when it saved.
+bool persistAutoAfterManualEnds(bool manual_active, bool* was_manual);

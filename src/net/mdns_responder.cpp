@@ -26,6 +26,15 @@ static constexpr uint32_t REJOIN_MS = 300000UL;
 // Max incoming packets handled per poll() so query bursts do not queue
 // behind slow main-loop passes.
 static constexpr uint8_t POLL_MAX_PACKETS = 4;
+static constexpr uint16_t MAX_CLAIM_ATTEMPTS = 8;
+// A running responder tolerates transient socket errors. It stops only after
+// this many consecutive send or multicast-join failures.
+static constexpr uint8_t MAX_IO_FAILURES = 3;
+static constexpr uint32_t IO_RETRY_MS = 1000UL;
+
+static bool deadlineReached(uint32_t now, uint32_t deadline) {
+    return (int32_t)(now - deadline) >= 0;
+}
 
 // Startup announce burst: RFC 6762 §8.3 — first gap 1s, then 2s, then 4s.
 // We do 3 announces; after the 3rd we switch to the periodic timer.
@@ -52,7 +61,8 @@ static constexpr uint16_t PROBE_START_JITTER_MS = 250;
 
 MdnsResponder::MdnsResponder()
     : _label_len(0), _running(false),
-      _next_announce_ms(0), _next_rejoin_ms(0), _announce_count(0), _suffix(0)
+      _next_announce_ms(0), _next_rejoin_ms(0), _announce_count(0), _suffix(0),
+      _io_failures(0)
 {
     memset(_base_name, 0, sizeof(_base_name));
     memset(_hostname, 0, sizeof(_hostname));
@@ -62,14 +72,17 @@ MdnsResponder::MdnsResponder()
 
 bool MdnsResponder::begin(const char* base_name) {
     if (!base_name || !base_name[0] || !WiFi.ready()) return false;
-
-    _udp.stop();
-    _udp.begin(MDNS_PORT);
-    _udp.joinMulticast(MDNS_GROUP);
+    stop();
+    if (!_udp.begin(MDNS_PORT) || _udp.joinMulticast(MDNS_GROUP) != 0) {
+        stop();
+        return false;
+    }
     strncpy(_base_name, base_name, sizeof(_base_name) - 1);
     _base_name[sizeof(_base_name) - 1] = '\0';
-    if (!_claim(_base_name, 0)) return false;
-
+    if (!_claim(_base_name, 0)) {
+        stop();
+        return false;
+    }
     _next_rejoin_ms = millis() + REJOIN_MS;
     _running = true;
     return true;
@@ -77,48 +90,11 @@ bool MdnsResponder::begin(const char* base_name) {
 
 bool MdnsResponder::restart(const char* base_name) {
     if (!base_name || !base_name[0] || !WiFi.ready()) return false;
-
-    char old_base[sizeof(_base_name)];
-    char old_hostname[sizeof(_hostname)];
-    const uint8_t old_label_len = _label_len;
-    const bool old_running = _running;
-    const uint16_t old_suffix = _suffix;
-    strncpy(old_base, _base_name, sizeof(old_base) - 1);
-    old_base[sizeof(old_base) - 1] = '\0';
-    strncpy(old_hostname, _hostname, sizeof(old_hostname) - 1);
-    old_hostname[sizeof(old_hostname) - 1] = '\0';
-
-    if (_running && _hostname[0]) {
-        _sendGoodbye();
-    }
-
-    _running = false;
-    _suffix = 0;
-    _announce_count = 0;
-    _next_announce_ms = 0;
-    memset(_base_name, 0, sizeof(_base_name));
-    memset(_hostname, 0, sizeof(_hostname));
-    _label_len = 0;
-
-    _udp.stop();
-    _udp.begin(MDNS_PORT);
-    _udp.joinMulticast(MDNS_GROUP);
-    strncpy(_base_name, base_name, sizeof(_base_name) - 1);
-    _base_name[sizeof(_base_name) - 1] = '\0';
-    if (!_claim(_base_name, 0)) {
-        strncpy(_base_name, old_base, sizeof(_base_name) - 1);
-        _base_name[sizeof(_base_name) - 1] = '\0';
-        strncpy(_hostname, old_hostname, sizeof(_hostname) - 1);
-        _hostname[sizeof(_hostname) - 1] = '\0';
-        _label_len = old_label_len;
-        _running = old_running;
-        _suffix = old_suffix;
-        return false;
-    }
-
-    _next_rejoin_ms = millis() + REJOIN_MS;
-    _running = true;
-    return true;
+    char requested[sizeof(_base_name)];
+    strncpy(requested, base_name, sizeof(requested) - 1);
+    requested[sizeof(requested) - 1] = '\0';
+    stop();
+    return begin(requested);
 }
 
 void MdnsResponder::stop() {
@@ -131,6 +107,7 @@ void MdnsResponder::stop() {
     _announce_count = 0;
     _next_announce_ms = 0;
     _next_rejoin_ms = 0;
+    _io_failures = 0;
     memset(_base_name, 0, sizeof(_base_name));
     memset(_hostname, 0, sizeof(_hostname));
     _label_len = 0;
@@ -138,24 +115,30 @@ void MdnsResponder::stop() {
 
 bool MdnsResponder::_claim(const char* base_name, uint16_t start_suffix) {
     char candidate[sizeof(_hostname)];
-    for (uint16_t suffix = start_suffix;; ++suffix) {
+    for (uint32_t attempt = 0; attempt < MAX_CLAIM_ATTEMPTS; ++attempt) {
+        const uint32_t value = (uint32_t)start_suffix + attempt;
+        if (value > UINT16_MAX) return false;
+        const uint16_t suffix = (uint16_t)value;
         if (!_formatCandidate(candidate, sizeof(candidate), base_name, suffix)) {
             return false;
         }
         const uint8_t len = (uint8_t)strlen(candidate);
         if (len == 0) continue;
-        if (_probe(candidate, len)) continue;
+        const int probe = _probe(candidate, len);
+        if (probe < 0) return false;
+        if (probe > 0) continue;
 
         strncpy(_hostname, candidate, sizeof(_hostname) - 1);
         _hostname[sizeof(_hostname) - 1] = '\0';
         _label_len = len;
         _suffix = suffix;
         _announce_count = 0;
-        _announce();
+        if (!_announce()) return false;
         _announce_count = 1;
         _next_announce_ms = millis() + ANNOUNCE_GAPS_MS[0];
         return true;
     }
+    return false;
 }
 
 bool MdnsResponder::_formatCandidate(char* out, size_t out_len,
@@ -170,23 +153,27 @@ void MdnsResponder::poll() {
 
     // Startup burst (up to 3 total announces)
     uint32_t now = millis();
-    if (_announce_count < 3 && now >= _next_announce_ms) {
-        _announce();
-        _announce_count++;
-        if (_announce_count < 3) {
+    if (_announce_count < 3 && deadlineReached(now, _next_announce_ms)) {
+        const bool sent = _announce();
+        if (!_noteIo(sent)) { stop(); return; }
+        if (!sent) {
+            _next_announce_ms = now + IO_RETRY_MS;
+        } else if (++_announce_count < 3) {
             _next_announce_ms = now + ANNOUNCE_GAPS_MS[_announce_count - 1];
         } else {
             _next_announce_ms = now + REANNOUNCE_MS;
         }
-    } else if (_announce_count >= 3 && now >= _next_announce_ms) {
-        _announce();
-        _next_announce_ms = now + REANNOUNCE_MS;
+    } else if (_announce_count >= 3 && deadlineReached(now, _next_announce_ms)) {
+        const bool sent = _announce();
+        if (!_noteIo(sent)) { stop(); return; }
+        _next_announce_ms = now + (sent ? REANNOUNCE_MS : IO_RETRY_MS);
     }
 
     // Periodic IGMP re-join keeps AP multicast forwarding alive
-    if (now >= _next_rejoin_ms) {
-        _udp.joinMulticast(MDNS_GROUP);
-        _next_rejoin_ms = now + REJOIN_MS;
+    if (deadlineReached(now, _next_rejoin_ms)) {
+        const bool joined = _udp.joinMulticast(MDNS_GROUP) == 0;
+        if (!_noteIo(joined)) { stop(); return; }
+        _next_rejoin_ms = now + (joined ? REJOIN_MS : IO_RETRY_MS);
     }
 
     // Handle incoming queries (bounded drain per poll)
@@ -207,21 +194,23 @@ void MdnsResponder::poll() {
         if (buf[2] & 0x80) {
             if (_detectRuntimeConflict(buf, n) && _base_name[0]) {
                 // _claim re-probes and consumes packets itself; stop draining
-                _claim(_base_name, (uint16_t)(_suffix + 1));
+                if (_suffix == UINT16_MAX || !_claim(_base_name, (uint16_t)(_suffix + 1))) stop();
                 break;
             }
             continue;
         }
 
         _handleQuery(buf, n, remote, rport);
+        if (!_running) return;
     }
 }
 
 // ── _probe() ─────────────────────────────────────────────────────────────────
 // Send RFC-style mDNS probes and watch for conflicting probes or answers.
-// Returns true if the candidate name is already taken or loses tie-break.
+// Returns 1 if the candidate name is taken or loses tie-break, 0 if it is
+// free, and -1 if a probe cannot be sent.
 
-bool MdnsResponder::_probe(const char* name, uint8_t len) {
+int MdnsResponder::_probe(const char* name, uint8_t len) {
     const uint32_t our_ip = mdnsPackIpv4(WiFi.localIP()[0], WiFi.localIP()[1],
                                          WiFi.localIP()[2], WiFi.localIP()[3]);
 
@@ -241,12 +230,10 @@ bool MdnsResponder::_probe(const char* name, uint8_t len) {
         pkt[off++] = 0; pkt[off++] = DNS_CLASS_IN;
         off = _writeARecordForLabel(pkt, off, name, len, TTL_A, false);
 
-        _udp.beginPacket(MDNS_GROUP, MDNS_PORT);
-        _udp.write(pkt, off);
-        _udp.endPacket();
+        if (!_sendPacket(MDNS_GROUP, MDNS_PORT, pkt, off)) return -1;
 
-        const uint32_t deadline = millis() + PROBE_SPACING_MS;
-        while (millis() < deadline) {
+        const uint32_t started = millis();
+        while ((uint32_t)(millis() - started) < PROBE_SPACING_MS) {
             int sz = _udp.parsePacket();
             if (sz < 12) {
                 delay(10);
@@ -257,18 +244,34 @@ bool MdnsResponder::_probe(const char* name, uint8_t len) {
             const uint16_t n = (uint16_t)_udp.read(buf, sizeof(buf));
             if (_udp.remoteIP() == WiFi.localIP()) continue;
             if (mdnsPacketConflicts(buf, n, name, our_ip, MDNS_CONFLICT_MODE_PROBE)) {
-                return true;
+                return 1;
             }
         }
     }
 
-    return false;
+    return 0;
 }
 
 // ── _announce() ───────────────────────────────────────────────────────────────
 // Unsolicited multicast response with A record + DNS-SD service records.
 
-void MdnsResponder::_announce() {
+bool MdnsResponder::_noteIo(bool ok) {
+    if (ok) {
+        _io_failures = 0;
+        return true;
+    }
+    if (_io_failures < MAX_IO_FAILURES) _io_failures++;
+    return _io_failures < MAX_IO_FAILURES;
+}
+
+bool MdnsResponder::_sendPacket(IPAddress destination, uint16_t port,
+                                const uint8_t* data, uint16_t len) {
+    if (_udp.beginPacket(destination, port) <= 0) return false;
+    if (_udp.write(data, len) != len) return false;
+    return _udp.endPacket() > 0;
+}
+
+bool MdnsResponder::_announce() {
     uint8_t pkt[280];
     memset(pkt, 0, sizeof(pkt));
 
@@ -290,9 +293,7 @@ void MdnsResponder::_announce() {
     pkt[6] = (rcount >> 8) & 0xFF;
     pkt[7] = rcount & 0xFF;
 
-    _udp.beginPacket(MDNS_GROUP, MDNS_PORT);
-    _udp.write(pkt, off);
-    _udp.endPacket();
+    return _sendPacket(MDNS_GROUP, MDNS_PORT, pkt, off);
 }
 
 void MdnsResponder::_sendGoodbye() {
@@ -408,13 +409,11 @@ void MdnsResponder::_handleQuery(const uint8_t* pkt, uint16_t pkt_len,
     resp[7] = rcount & 0xFF;
 
     // Legacy or QU: reply unicast to sender; standard: multicast
-    if (unicast) {
-        _udp.beginPacket(remote, rport);
-    } else {
-        _udp.beginPacket(MDNS_GROUP, MDNS_PORT);
+    // A failed reply is dropped; the querier retries.
+    if (!_noteIo(_sendPacket(unicast ? remote : MDNS_GROUP,
+                             unicast ? rport : MDNS_PORT, resp, roff))) {
+        stop();
     }
-    _udp.write(resp, roff);
-    _udp.endPacket();
 }
 
 bool MdnsResponder::_detectRuntimeConflict(const uint8_t* pkt, uint16_t pkt_len) const {

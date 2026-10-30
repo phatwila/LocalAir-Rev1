@@ -57,9 +57,9 @@ source, dashboard, and helpers needed to build and flash it.
 
 ## Getting Started
 
-Release **v1.0.0** includes a prebuilt binary, so you can flash your purifier
-without setting up a compiler. The package version is `1.0.0`; the firmware
-reports `localair-rev1+b56`, build **56**.
+Release **v1.1.0** includes a prebuilt binary, so you can flash your purifier
+without setting up a compiler. The package version is `1.1.0`; the firmware
+reports `localair-rev1+b61`, build **61**.
 
 **First time?** Follow [First-time setup](docs/FIRST_TIME_SETUP.md). It covers
 the purifier's buttons and status LED, creating a free Particle account,
@@ -67,7 +67,7 @@ finding the device ID, Wi-Fi, safe mode, claiming, and the first flash.
 
 Flashing needs only the [Particle CLI](https://docs.particle.io/reference/developer-tools/cli/)
 and three files from the
-[v1.0.0 release](https://github.com/phatwila/LocalAir-Rev1/releases/tag/v1.0.0):
+[v1.1.0 release](https://github.com/phatwila/LocalAir-Rev1/releases/tag/v1.1.0):
 `localair-rev1.bin`, `SHA256SUMS`, and `release-info.json`. The Particle CLI
 is available for Windows, macOS, and Linux. Download them into one folder and verify them there:
 
@@ -77,10 +77,10 @@ shasum -a 256 -c SHA256SUMS       # macOS
 ```
 
 On Windows, compare `Get-FileHash .\localair-rev1.bin` with `SHA256SUMS`.
-The firmware binary is **120,044 bytes**, with SHA-256:
+The firmware binary is **121,244 bytes**, with SHA-256:
 
 ```text
-8b294e461fbf2071fa3d56893e9bae5d1b433ea8993cba86d2cf8964f61e676f
+b0cfaa6f53f033fb56cf3f4ae041c5bce3a5a791396b5bc785fd2a3bc56fa813
 ```
 
 ### OTA install
@@ -152,7 +152,9 @@ separates Auto demand, the selected fan command, and RPM feedback.
 
 Manual is for deliberate owner control. Setting a fan percentage creates an
 intentional override that sits above Auto and persists as the chosen control
-state until the user returns the purifier to Auto.
+state until the user returns the purifier to Auto. If a fan apply timeout,
+apply failure, or backend loss ends Manual control, the firmware saves Auto, so
+a reboot does not bring Manual back.
 
 The schedule can select a fan percentage during a daytime or overnight window.
 Manual takes priority over Schedule, which takes priority over Auto. Scheduling

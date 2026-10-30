@@ -25,30 +25,56 @@ public:
     size_t write(const uint8_t*, size_t n) override { count += n; return n; }
 };
 
-// ---------------------------------------------------------------------------
-// ReliableTcpPrint — wraps TCPClient to ensure `print()` calls block and
-// loop correctly if the underlying TX buffer is full, preventing silent chunk
-// dropping for payloads > TX buffer size (e.g. 512B).
-// ---------------------------------------------------------------------------
+static bool deadlineReached(uint32_t deadline) {
+    return (int32_t)(millis() - deadline) >= 0;
+}
+
+static bool remainingMs(uint32_t deadline, uint32_t* out) {
+    const uint32_t now = millis();
+    if ((int32_t)(now - deadline) >= 0) return false;
+    *out = deadline - now;
+    return true;
+}
+
+// All writes for one packet share an absolute deadline. TCP write timeouts
+// bound lower-level waits; retries cannot extend the packet deadline.
+static bool writeAll(TCPClient& tcp, const uint8_t* data, size_t len, uint32_t deadline) {
+    size_t sent = 0;
+    while (sent < len && tcp.connected()) {
+        uint32_t timeout_ms = 0;
+        if (!remainingMs(deadline, &timeout_ms)) break;
+        const int wrote = (int)tcp.write(data + sent, len - sent, timeout_ms);
+        if (wrote > 0) sent += (size_t)wrote;
+        else if (!deadlineReached(deadline)) delay(1);
+    }
+    return sent == len;
+}
+
+static int readByteUntil(TCPClient& tcp, uint32_t deadline) {
+    while (!deadlineReached(deadline)) {
+        const int value = tcp.read();
+        if (value >= 0) return value;
+        delay(1);
+    }
+    return -1;
+}
+
+// ReliableTcpPrint retains the streaming renderer while propagating failures.
 class ReliableTcpPrint : public Print {
     TCPClient& _tcp;
+    uint32_t _deadline;
+    bool _ok = true;
 public:
-    ReliableTcpPrint(TCPClient& tcp) : _tcp(tcp) {}
+    ReliableTcpPrint(TCPClient& tcp, uint32_t deadline) : _tcp(tcp), _deadline(deadline) {}
     size_t write(uint8_t b) override { return write(&b, 1); }
     size_t write(const uint8_t* buffer, size_t size) override {
-        size_t sent = 0;
-        uint32_t deadline = millis() + 5000;
-        while (sent < size && _tcp.connected()) {
-            int wrote = _tcp.write(buffer + sent, size - sent);
-            if (wrote > 0) {
-                sent += wrote;
-            } else {
-                if ((int32_t)(millis() - deadline) > 0) break;
-                delay(1);
-            }
+        if (!_ok || !writeAll(_tcp, buffer, size, _deadline)) {
+            _ok = false;
+            return 0;
         }
-        return sent;
+        return size;
     }
+    bool ok() const { return _ok; }
 };
 
 static void safeCopy(char* out, size_t out_len, const char* value) {
@@ -85,24 +111,24 @@ static bool readTopicPayload(uint8_t header, const uint8_t* body, size_t body_le
     if (!topic_out || topic_out_len == 0 || !payload_out || payload_out_len == 0) return false;
     if (body_len < 2) return false;
     size_t pos = 0;
-    uint16_t topic_len = (uint16_t)((body[pos] << 8) | body[pos + 1]);
+    const uint16_t topic_len = (uint16_t)((body[pos] << 8) | body[pos + 1]);
     pos += 2;
-    if (pos + topic_len > body_len) return false;
-    size_t copy_topic = topic_len < (topic_out_len - 1) ? topic_len : (topic_out_len - 1);
-    memcpy(topic_out, body + pos, copy_topic);
-    topic_out[copy_topic] = '\0';
+    if (topic_len == 0 || topic_len >= topic_out_len || pos + topic_len > body_len ||
+        memchr(body + pos, '\0', topic_len)) return false;
+    memcpy(topic_out, body + pos, topic_len);
+    topic_out[topic_len] = '\0';
     pos += topic_len;
 
-    uint8_t qos = (header >> 1) & 0x03;
+    const uint8_t qos = (header >> 1) & 0x03;
     if (qos > 0) {
         if (pos + 2 > body_len) return false;
         pos += 2;
     }
 
-    size_t payload_len = body_len - pos;
-    size_t copy_payload = payload_len < (payload_out_len - 1) ? payload_len : (payload_out_len - 1);
-    if (copy_payload > 0) memcpy(payload_out, body + pos, copy_payload);
-    payload_out[copy_payload] = '\0';
+    const size_t payload_len = body_len - pos;
+    if (payload_len >= payload_out_len || memchr(body + pos, '\0', payload_len)) return false;
+    if (payload_len > 0) memcpy(payload_out, body + pos, payload_len);
+    payload_out[payload_len] = '\0';
     return true;
 }
 
@@ -181,7 +207,7 @@ bool MqttClient::testConnection(const Config& config, char* result, size_t resul
     char identity[24];
     copyMqttIdentity(_mdns_host, identity, sizeof(identity));
     char client_id[CLIENT_ID_LEN];
-    snprintf(client_id, sizeof(client_id), "localair-%s", identity[0] ? identity : "probe");
+    snprintf(client_id, sizeof(client_id), "probe-localair-%s", identity[0] ? identity : "unknown");
     char avail_topic[TOPIC_LEN];
     snprintf(avail_topic, sizeof(avail_topic), "localair-rev1/%s/available", identity[0] ? identity : "probe");
 
@@ -204,46 +230,41 @@ bool MqttClient::testConnection(const Config& config, char* result, size_t resul
     if (user) body_len += (2 + strlen(user));
     if (pass) body_len += (2 + strlen(pass));
 
-    uint8_t hdr = 0x10; 
-    probe.write(&hdr, 1);
-    uint8_t lenbuf[4];
-    size_t lenlen = encodeRemainingLength(lenbuf, body_len);
-    probe.write(lenbuf, lenlen);
-
+    const uint32_t deadline = millis() + 3000;
+    auto writeProbe = [&](const uint8_t* data, size_t len) {
+        return writeAll(probe, data, len, deadline);
+    };
     auto writeMqtt = [&](const char* s) {
-        size_t len = strlen(s);
-        uint8_t lhdr[2] = { (uint8_t)(len >> 8), (uint8_t)(len & 0xFF) };
-        probe.write(lhdr, 2);
-        probe.write(reinterpret_cast<const uint8_t*>(s), len);
+        const size_t len = strlen(s);
+        const uint8_t lhdr[2] = { (uint8_t)(len >> 8), (uint8_t)(len & 0xFF) };
+        return writeProbe(lhdr, 2) && writeProbe(reinterpret_cast<const uint8_t*>(s), len);
     };
 
-    writeMqtt("MQTT");
-    uint8_t proto_lvl = 0x04; probe.write(&proto_lvl, 1);
+    const uint8_t hdr = 0x10;
+    uint8_t lenbuf[4];
+    const size_t lenlen = encodeRemainingLength(lenbuf, body_len);
+    const uint8_t proto_lvl = 0x04;
     uint8_t flags = 0x02; // clean session
     if (user) flags |= 0x80;
     if (pass) flags |= 0x40;
-    probe.write(&flags, 1);
-    uint8_t ka[2] = { 0x00, 0x1E }; // 30s
-    probe.write(ka, 2);
-
-    writeMqtt(client_id);
-    if (user) writeMqtt(user);
-    if (pass) writeMqtt(pass);
-
-    uint8_t header = 0;
-    int ch = -1;
-    uint32_t deadline = millis() + 3000;
-    while ((int32_t)(millis() - deadline) < 0) {
-        ch = probe.read();
-        if (ch >= 0) break;
-        delay(1);
+    const uint8_t ka[2] = { 0x00, 0x1E }; // 30s
+    const bool sent = writeProbe(&hdr, 1) && writeProbe(lenbuf, lenlen) &&
+                      writeMqtt("MQTT") && writeProbe(&proto_lvl, 1) &&
+                      writeProbe(&flags, 1) && writeProbe(ka, 2) &&
+                      writeMqtt(client_id) && (!user || writeMqtt(user)) &&
+                      (!pass || writeMqtt(pass));
+    if (!sent) {
+        probe.stop();
+        safeCopy(result, result_len, "MQTT CONNECT write failed");
+        return false;
     }
-    if (ch < 0) {
+
+    const int header = readByteUntil(probe, deadline);
+    if (header < 0) {
         probe.stop();
         safeCopy(result, result_len, "MQTT CONNACK timeout");
         return false;
     }
-    header = (uint8_t)ch;
     if ((header >> 4) != 2) {
         probe.stop();
         safeCopy(result, result_len, "MQTT CONNACK missing");
@@ -252,43 +273,40 @@ bool MqttClient::testConnection(const Config& config, char* result, size_t resul
 
     size_t multiplier = 1;
     size_t remaining_len = 0;
+    bool valid_remaining = false;
     for (uint8_t i = 0; i < 4; ++i) {
-        uint32_t byte_deadline = millis() + 1000;
-        int rl = -1;
-        while ((int32_t)(millis() - byte_deadline) < 0) {
-            rl = probe.read();
-            if (rl >= 0) break;
-            delay(1);
-        }
+        const int rl = readByteUntil(probe, deadline);
         if (rl < 0) {
             probe.stop();
             safeCopy(result, result_len, "MQTT CONNACK timeout");
             return false;
         }
         remaining_len += (size_t)(rl & 127) * multiplier;
-        if ((rl & 128) == 0) break;
+        if ((rl & 128) == 0) {
+            valid_remaining = true;
+            break;
+        }
         multiplier *= 128;
     }
 
-    uint8_t resp[4] = {0};
-    size_t resp_len = 0;
-    while (resp_len < remaining_len && resp_len < sizeof(resp)) {
-        int byte = probe.read();
+    uint8_t resp[2] = {0};
+    for (size_t i = 0; i < remaining_len && i < sizeof(resp); ++i) {
+        const int byte = readByteUntil(probe, deadline);
         if (byte < 0) {
             probe.stop();
-            safeCopy(result, result_len, "MQTT CONNACK read failed");
+            safeCopy(result, result_len, "MQTT CONNACK timeout");
             return false;
         }
-        resp[resp_len++] = (uint8_t)byte;
+        resp[i] = (uint8_t)byte;
     }
-    if (remaining_len < 2 || resp[1] != 0x00) {
+    if (!valid_remaining || remaining_len != 2 || resp[1] != 0x00) {
         probe.stop();
         safeCopy(result, result_len, "MQTT broker rejected CONNECT");
         return false;
     }
 
-    uint8_t disc[2] = {0xE0, 0x00};
-    probe.write(disc, sizeof(disc));
+    const uint8_t disc[2] = {0xE0, 0x00};
+    writeProbe(disc, sizeof(disc));
     probe.stop();
     safeCopy(result, result_len, "MQTT broker accepted CONNECT");
     return true;
@@ -301,45 +319,34 @@ uint16_t MqttClient::nextPacketId() {
 
 bool MqttClient::sendPacket(const uint8_t* data, size_t len) {
     if (!_tcp.connected() || !data || len == 0) return false;
-    size_t sent = 0;
-    while (sent < len) {
-        int wrote = _tcp.write(data + sent, len - sent);
-        if (wrote <= 0) return false;
-        sent += (size_t)wrote;
-    }
+    if (!writeAll(_tcp, data, len, millis() + TX_PACKET_TIMEOUT_MS)) return false;
     _last_tx_ms = millis();
     return true;
 }
 
-bool MqttClient::readExact(uint8_t* out, size_t len, uint32_t timeout_ms) {
+bool MqttClient::readExact(uint8_t* out, size_t len, uint32_t deadline) {
     if (!out || len == 0) return true;
-    uint32_t deadline = millis() + timeout_ms;
     size_t pos = 0;
-    while (pos < len) {
-        while (_tcp.available() > 0 && pos < len) {
-            int v = _tcp.read();
-            if (v < 0) break;
-            out[pos++] = (uint8_t)v;
-        }
-        if (pos >= len) break;
-        if ((int32_t)(millis() - deadline) >= 0) return false;
-        delay(1);
+    while (pos < len && !deadlineReached(deadline)) {
+        const int value = _tcp.read();
+        if (value >= 0) out[pos++] = (uint8_t)value;
+        else delay(1);
     }
-    return true;
+    return pos == len;
 }
 
-int MqttClient::readByte(uint32_t timeout_ms) {
+int MqttClient::readByte(uint32_t deadline) {
     uint8_t b = 0;
-    if (!readExact(&b, 1, timeout_ms)) return -1;
+    if (!readExact(&b, 1, deadline)) return -1;
     return (int)b;
 }
 
-bool MqttClient::readRemainingLength(size_t* remaining) {
+bool MqttClient::readRemainingLength(size_t* remaining, uint32_t deadline) {
     if (!remaining) return false;
     size_t multiplier = 1;
     size_t value = 0;
     for (uint8_t i = 0; i < 4; ++i) {
-        int ch = readByte(1000);
+        const int ch = readByte(deadline);
         if (ch < 0) return false;
         value += (size_t)(ch & 127) * multiplier;
         if ((ch & 128) == 0) {
@@ -351,26 +358,20 @@ bool MqttClient::readRemainingLength(size_t* remaining) {
     return false;
 }
 
-bool MqttClient::readPacket(uint8_t* type, uint8_t* payload, size_t payload_cap, size_t* payload_len) {
+bool MqttClient::readPacket(uint8_t* type, uint8_t* payload, size_t payload_cap, size_t* payload_len,
+                            uint32_t timeout_ms) {
     if (type) *type = 0;
     if (payload_len) *payload_len = 0;
-    int header = readByte(1000);
+    if (!payload && payload_cap > 0) return false;
+    const uint32_t deadline = millis() + timeout_ms;
+    const int header = readByte(deadline);
     if (header < 0) return false;
 
     size_t remaining = 0;
-    if (!readRemainingLength(&remaining)) return false;
-    if (remaining > payload_cap) {
-        // Drain oversized packet.
-        uint8_t discard[32];
-        size_t left = remaining;
-        while (left > 0) {
-            size_t step = left < sizeof(discard) ? left : sizeof(discard);
-            if (!readExact(discard, step, 1000)) return false;
-            left -= step;
-        }
-        return false;
-    }
-    if (!readExact(payload, remaining, 1000)) return false;
+    if (!readRemainingLength(&remaining, deadline)) return false;
+    // Never drain an oversized frame. Close it before it can monopolize the loop.
+    if (remaining > payload_cap) return false;
+    if (!readExact(payload, remaining, deadline)) return false;
     if (type) *type = (uint8_t)header;
     if (payload_len) *payload_len = remaining;
     return true;
@@ -400,36 +401,29 @@ bool MqttClient::sendConnectPacket() {
     if (user) body_len += (2 + strlen(user));
     if (pass) body_len += (2 + strlen(pass));
 
-    // Fixed Header
-    uint8_t hdr = 0x10;
-    _tcp.write(&hdr, 1);
-
-    uint8_t lenbuf[4];
-    size_t lenlen = encodeRemainingLength(lenbuf, body_len);
-    if (_tcp.write(lenbuf, lenlen) != lenlen) return false;
-
+    const uint32_t deadline = millis() + TX_PACKET_TIMEOUT_MS;
+    auto write = [&](const uint8_t* data, size_t len) {
+        return writeAll(_tcp, data, len, deadline);
+    };
     auto writeMqttString = [&](const char* s) {
-        size_t len = strlen(s);
-        uint8_t len_hdr[2] = { (uint8_t)(len >> 8), (uint8_t)(len & 0xFF) };
-        _tcp.write(len_hdr, 2);
-        _tcp.write(reinterpret_cast<const uint8_t*>(s), len);
+        const size_t len = strlen(s);
+        const uint8_t len_hdr[2] = { (uint8_t)(len >> 8), (uint8_t)(len & 0xFF) };
+        return write(len_hdr, 2) && write(reinterpret_cast<const uint8_t*>(s), len);
     };
 
-    writeMqttString("MQTT");
-    uint8_t proto_lvl = 0x04;
-    _tcp.write(&proto_lvl, 1);
-    _tcp.write(&flags, 1);
-    uint16_t ka = (uint16_t)KEEPALIVE_MS / 1000;
-    uint8_t ka_hdr[2] = { (uint8_t)(ka >> 8), (uint8_t)(ka & 0xFF) };
-    _tcp.write(ka_hdr, 2);
-
-    writeMqttString(_client_id);
-    if (_avail_topic[0]) {
-        writeMqttString(_avail_topic);
-        writeMqttString("offline");
-    }
-    if (user) writeMqttString(user);
-    if (pass) writeMqttString(pass);
+    const uint8_t hdr = 0x10;
+    uint8_t lenbuf[4];
+    const size_t lenlen = encodeRemainingLength(lenbuf, body_len);
+    const uint8_t proto_lvl = 0x04;
+    const uint16_t ka = (uint16_t)KEEPALIVE_MS / 1000;
+    const uint8_t ka_hdr[2] = { (uint8_t)(ka >> 8), (uint8_t)(ka & 0xFF) };
+    const bool sent = write(&hdr, 1) && write(lenbuf, lenlen) &&
+                      writeMqttString("MQTT") && write(&proto_lvl, 1) &&
+                      write(&flags, 1) && write(ka_hdr, 2) &&
+                      writeMqttString(_client_id) &&
+                      (!_avail_topic[0] || (writeMqttString(_avail_topic) && writeMqttString("offline"))) &&
+                      (!user || writeMqttString(user)) && (!pass || writeMqttString(pass));
+    if (!sent) return false;
 
     _last_tx_ms = millis();
     return true;
@@ -442,57 +436,80 @@ bool MqttClient::publishPacket(const char* topic, const char* payload, bool reta
     size_t payload_len = strlen(payload);
     size_t remaining_length = 2 + topic_len + payload_len;
 
-    // Stream Fixed Header
-    uint8_t hdr = 0x30 | (retain ? 0x01 : 0x00);
-    if (_tcp.write(&hdr, 1) != 1) return false;
-
+    const uint32_t deadline = millis() + TX_PACKET_TIMEOUT_MS;
+    const uint8_t hdr = 0x30 | (retain ? 0x01 : 0x00);
     uint8_t lenbuf[4];
-    size_t lenlen = encodeRemainingLength(lenbuf, remaining_length);
-    if (_tcp.write(lenbuf, lenlen) != lenlen) return false;
-
-    // Stream Topic
-    uint8_t topic_hdr[2] = {
+    const size_t lenlen = encodeRemainingLength(lenbuf, remaining_length);
+    const uint8_t topic_hdr[2] = {
         (uint8_t)((topic_len >> 8) & 0xFF),
         (uint8_t)(topic_len & 0xFF)
     };
-    if (_tcp.write(topic_hdr, 2) != 2) return false;
-    if (_tcp.write(reinterpret_cast<const uint8_t*>(topic), topic_len) != topic_len) return false;
-
-    // Stream Payload
-    if (_tcp.write(reinterpret_cast<const uint8_t*>(payload), payload_len) != payload_len) return false;
+    const bool sent = writeAll(_tcp, &hdr, 1, deadline) &&
+                      writeAll(_tcp, lenbuf, lenlen, deadline) &&
+                      writeAll(_tcp, topic_hdr, 2, deadline) &&
+                      writeAll(_tcp, reinterpret_cast<const uint8_t*>(topic), topic_len, deadline) &&
+                      writeAll(_tcp, reinterpret_cast<const uint8_t*>(payload), payload_len, deadline);
+    if (!sent) return false;
 
     _last_tx_ms = millis();
     return true;
 }
 
-bool MqttClient::subscribeTopic(const char* topic) {
-    if (!topic || !_tcp.connected()) return false;
+bool MqttClient::subscribeTopic(const char* topic, uint16_t* packet_id) {
+    if (!topic || !packet_id || !_tcp.connected()) return false;
 
-    size_t topic_len = strlen(topic);
-    size_t remaining_length = 5 + topic_len; // PID(2) + TopicLen(2) + Topic + QoS(1)
-
-    // Stream Header
-    uint8_t hdr = 0x82;
-    if (_tcp.write(&hdr, 1) != 1) return false;
-
+    const size_t topic_len = strlen(topic);
+    const size_t remaining_length = 5 + topic_len; // PID(2) + TopicLen(2) + Topic + QoS(1)
+    const uint32_t deadline = millis() + TX_PACKET_TIMEOUT_MS;
+    const uint8_t hdr = 0x82;
     uint8_t lenbuf[4];
-    size_t lenlen = encodeRemainingLength(lenbuf, remaining_length);
-    if (_tcp.write(lenbuf, lenlen) != lenlen) return false;
+    const size_t lenlen = encodeRemainingLength(lenbuf, remaining_length);
+    const uint16_t pid = nextPacketId();
+    const uint8_t pid_hdr[2] = { (uint8_t)(pid >> 8), (uint8_t)(pid & 0xFF) };
+    const uint8_t topic_hdr[2] = { (uint8_t)(topic_len >> 8), (uint8_t)(topic_len & 0xFF) };
+    const uint8_t qos = 0x00;
+    const bool sent = writeAll(_tcp, &hdr, 1, deadline) &&
+                      writeAll(_tcp, lenbuf, lenlen, deadline) &&
+                      writeAll(_tcp, pid_hdr, 2, deadline) &&
+                      writeAll(_tcp, topic_hdr, 2, deadline) &&
+                      writeAll(_tcp, reinterpret_cast<const uint8_t*>(topic), topic_len, deadline) &&
+                      writeAll(_tcp, &qos, 1, deadline);
+    if (!sent) return false;
 
-    // Stream Body
-    uint16_t pid = nextPacketId();
-    uint8_t pid_hdr[2] = { (uint8_t)(pid >> 8), (uint8_t)(pid & 0xFF) };
-    if (_tcp.write(pid_hdr, 2) != 2) return false;
-
-    uint8_t topic_hdr[2] = { (uint8_t)(topic_len >> 8), (uint8_t)(topic_len & 0xFF) };
-    if (_tcp.write(topic_hdr, 2) != 2) return false;
-    if (_tcp.write(reinterpret_cast<const uint8_t*>(topic), topic_len) != topic_len) return false;
-
-    uint8_t qos = 0x00;
-    if (_tcp.write(&qos, 1) != 1) return false;
-
+    *packet_id = pid;
     _last_tx_ms = millis();
     return true;
+}
+
+bool MqttClient::awaitSubscriptions(uint16_t cmd_packet_id, uint16_t pct_packet_id) {
+    bool cmd_accepted = false;
+    bool pct_accepted = false;
+    const uint32_t deadline = millis() + SUBACK_TIMEOUT_MS;
+    while ((!cmd_accepted || !pct_accepted) && !deadlineReached(deadline)) {
+        uint8_t type = 0;
+        uint8_t payload[RX_LEN];
+        size_t payload_len = 0;
+        uint32_t left = 0;
+        if (!remainingMs(deadline, &left)) return false;
+        const uint32_t timeout = left < RX_PACKET_TIMEOUT_MS ? left : RX_PACKET_TIMEOUT_MS;
+        if (!readPacket(&type, payload, sizeof(payload), &payload_len, timeout)) return false;
+        if (type == 0x90) {
+            if (payload_len != 3) return false;
+            const uint16_t packet_id = ((uint16_t)payload[0] << 8) | payload[1];
+            if (packet_id != cmd_packet_id && packet_id != pct_packet_id) continue;
+            if (payload[2] != 0x00) return false;
+            if (packet_id == cmd_packet_id) cmd_accepted = true;
+            if (packet_id == pct_packet_id) pct_accepted = true;
+        } else if ((type >> 4) == 3) {
+            char topic[TOPIC_LEN];
+            char msg[RX_LEN];
+            if (!readTopicPayload(type, payload, payload_len, topic, sizeof(topic), msg, sizeof(msg))) return false;
+            handleMessage(topic, msg, (type & 0x01) != 0);
+        } else if ((type >> 4) == 13) {
+            _waiting_pingresp = false;
+        }
+    }
+    return cmd_accepted && pct_accepted;
 }
 
 bool MqttClient::sendPing() {
@@ -535,7 +552,16 @@ bool MqttClient::connectBroker() {
         disconnectBroker(false);
         return false;
     }
-    if ((type >> 4) != 2 || payload_len < 2 || payload[1] != 0x00) {
+    if ((type >> 4) != 2 || payload_len != 2 || payload[1] != 0x00) {
+        disconnectBroker(false);
+        return false;
+    }
+
+    uint16_t cmd_packet_id = 0;
+    uint16_t pct_packet_id = 0;
+    if (!subscribeTopic(_cmd_topic, &cmd_packet_id) ||
+        !subscribeTopic(_pct_cmd_topic, &pct_packet_id) ||
+        !awaitSubscriptions(cmd_packet_id, pct_packet_id)) {
         disconnectBroker(false);
         return false;
     }
@@ -545,11 +571,15 @@ bool MqttClient::connectBroker() {
     _last_tx_ms = millis();
     _last_ping_ms = millis();
 
-    publishPacket(_avail_topic, "online", true);
-    subscribeTopic(_cmd_topic);
-    subscribeTopic(_pct_cmd_topic);
+    if (!publishPacket(_avail_topic, "online", true)) {
+        disconnectBroker(false);
+        return false;
+    }
     if (!_ha_discovery_sent) {
-        sendHaDiscovery();
+        if (!sendHaDiscovery()) {
+            disconnectBroker(false);
+            return false;
+        }
         _ha_discovery_sent = true;
     }
     return true;
@@ -566,11 +596,17 @@ void MqttClient::serviceIncoming() {
         disconnectBroker(false);
         return;
     }
-    while (_tcp.available() > 0) {
+    const uint32_t loop_deadline = millis() + RX_LOOP_BUDGET_MS;
+    for (uint8_t count = 0;
+         count < MAX_INCOMING_PACKETS_PER_LOOP && _tcp.available() > 0;
+         ++count) {
+        uint32_t left = 0;
+        if (!remainingMs(loop_deadline, &left)) return;
         uint8_t type = 0;
         uint8_t payload[RX_LEN];
         size_t payload_len = 0;
-        if (!readPacket(&type, payload, sizeof(payload), &payload_len)) {
+        const uint32_t timeout = left < RX_PACKET_TIMEOUT_MS ? left : RX_PACKET_TIMEOUT_MS;
+        if (!readPacket(&type, payload, sizeof(payload), &payload_len, timeout)) {
             disconnectBroker(false);
             return;
         }
@@ -578,14 +614,13 @@ void MqttClient::serviceIncoming() {
             case 3: {
                 char topic[TOPIC_LEN];
                 char msg[RX_LEN];
-                if (readTopicPayload(type, payload, payload_len, topic, sizeof(topic), msg, sizeof(msg))) {
-                    handleMessage(topic, msg);
+                if (!readTopicPayload(type, payload, payload_len, topic, sizeof(topic), msg, sizeof(msg))) {
+                    disconnectBroker(false);
+                    return;
                 }
+                handleMessage(topic, msg, (type & 0x01) != 0);
                 break;
             }
-            case 9:
-                // SUBACK
-                break;
             case 13:
                 _waiting_pingresp = false;
                 break;
@@ -659,19 +694,23 @@ void MqttClient::publishState(const PublicStatusView& view) {
         (uint8_t)(topic_len & 0xFF)
     };
 
-    // Pass 2: stream directly to TCP — no large intermediate buffer.
+    // Pass 2: every write shares one deadline; partial frames close the session.
     if (!_tcp.connected()) return;
-    if (_tcp.write(hdr, hdr_pos) != hdr_pos) return;
-    if (_tcp.write(topic_hdr, 2) != 2) return;
-    if (_tcp.write(reinterpret_cast<const uint8_t*>(_state_topic), topic_len) != topic_len) return;
-    
-    ReliableTcpPrint rprint(_tcp);
-    renderPublicStatusJson(rprint, view);
+    const uint32_t deadline = millis() + TX_PACKET_TIMEOUT_MS;
+    ReliableTcpPrint rprint(_tcp, deadline);
+    const bool sent = writeAll(_tcp, hdr, hdr_pos, deadline) &&
+                      writeAll(_tcp, topic_hdr, 2, deadline) &&
+                      writeAll(_tcp, reinterpret_cast<const uint8_t*>(_state_topic), topic_len, deadline);
+    if (sent) renderPublicStatusJson(rprint, view);
+    if (!sent || !rprint.ok()) {
+        disconnectBroker(false);
+        return;
+    }
     _last_tx_ms = millis();
 }
 
-void MqttClient::handleMessage(const char* topic, const char* payload) {
-    if (!topic || !payload) return;
+void MqttClient::handleMessage(const char* topic, const char* payload, bool retained_message) {
+    if (!topic || !payload || retained_message) return;
     if (strcmp(topic, _cmd_topic) == 0) {
         MqttCommandIntent intent{};
         if (parseMqttCommandIntent(payload, &intent) && intent.kind == MQTT_COMMAND_SPEED) {
@@ -702,8 +741,8 @@ void MqttClient::handleMessage(const char* topic, const char* payload) {
     }
 }
 
-void MqttClient::sendHaDiscovery() {
-    if (!_mdns_host || !_identity[0] || !_tcp.connected()) return;
+bool MqttClient::sendHaDiscovery() {
+    if (!_mdns_host || !_identity[0] || !_tcp.connected()) return false;
 
     auto publishDiscoveryStream = [&](const char* component, const char* sub_id, auto body_renderer) {
         char topic[TOPIC_LEN];
@@ -716,41 +755,43 @@ void MqttClient::sendHaDiscovery() {
         size_t topic_len = strlen(topic);
         size_t rem_len = 2 + topic_len + payload_len;
 
-        // Pass 2: Stream packet
-        uint8_t hdr = 0x30 | 0x01; // Publish + Retain
-        if (_tcp.write(&hdr, 1) != 1) return;
+        // Pass 2: all writes share one deadline and propagate partial frames.
+        const uint32_t deadline = millis() + TX_PACKET_TIMEOUT_MS;
+        const uint8_t hdr = 0x30 | 0x01; // Publish + Retain
         uint8_t lenbuf[4];
-        size_t lenlen = encodeRemainingLength(lenbuf, rem_len);
-        if (_tcp.write(lenbuf, lenlen) != lenlen) return;
-
-        uint8_t t_hdr[2] = { (uint8_t)(topic_len >> 8), (uint8_t)(topic_len & 0xFF) };
-        _tcp.write(t_hdr, 2);
-        _tcp.write(reinterpret_cast<const uint8_t*>(topic), topic_len);
-
-        body_renderer(_tcp);
+        const size_t lenlen = encodeRemainingLength(lenbuf, rem_len);
+        const uint8_t t_hdr[2] = { (uint8_t)(topic_len >> 8), (uint8_t)(topic_len & 0xFF) };
+        ReliableTcpPrint body(_tcp, deadline);
+        const bool sent = writeAll(_tcp, &hdr, 1, deadline) &&
+                          writeAll(_tcp, lenbuf, lenlen, deadline) &&
+                          writeAll(_tcp, t_hdr, 2, deadline) &&
+                          writeAll(_tcp, reinterpret_cast<const uint8_t*>(topic), topic_len, deadline);
+        if (sent) body_renderer(body);
+        if (!sent || !body.ok()) return false;
         _last_tx_ms = millis();
+        return true;
     };
 
     // Component: VOC Sensor
-    publishDiscoveryStream("sensor", "voc", [&](Print& p) {
+    if (!publishDiscoveryStream("sensor", "voc", [&](Print& p) {
         p.print("{\"name\":\""); p.print(_identity); p.print(" VOC\",\"state_topic\":\""); p.print(_state_topic);
         p.print("\",\"availability_topic\":\""); p.print(_avail_topic);
         p.print("\",\"value_template\":\"{{ value_json.sensors.voc_raw | int }}\",\"unit_of_measurement\":\"ppb\",");
         p.print("\"unique_id\":\"localair_"); p.print(_identity); p.print("_voc\",\"object_id\":\"localair_");
         p.print(_identity); p.print("_voc\"}");
-    });
-
+    })) return false;
+ 
     // Component: PM2.5 Sensor
-    publishDiscoveryStream("sensor", "pm25", [&](Print& p) {
+    if (!publishDiscoveryStream("sensor", "pm25", [&](Print& p) {
         p.print("{\"name\":\""); p.print(_identity); p.print(" PM2.5\",\"state_topic\":\""); p.print(_state_topic);
         p.print("\",\"availability_topic\":\""); p.print(_avail_topic);
         p.print("\",\"value_template\":\"{{ value_json.sensors.pm25 }}\",\"unit_of_measurement\":\"ug/m3\",");
         p.print("\"unique_id\":\"localair_"); p.print(_identity); p.print("_pm25\",\"object_id\":\"localair_");
         p.print(_identity); p.print("_pm25\"}");
-    });
-
+    })) return false;
+ 
     // Component: Fan
-    publishDiscoveryStream("fan", "fan", [&](Print& p) {
+    if (!publishDiscoveryStream("fan", "fan", [&](Print& p) {
         p.print("{\"name\":\""); p.print(_identity); p.print(" Fan\",\"state_topic\":\""); p.print(_state_topic);
         p.print("\",\"state_value_template\":\"{{ 'ON' if value_json.control.speed | int(0) > 0 else 'OFF' }}\",");
         p.print("\"availability_topic\":\""); p.print(_avail_topic);
@@ -762,5 +803,6 @@ void MqttClient::sendHaDiscovery() {
         p.print("\"unique_id\":\"localair_"); p.print(_identity); p.print("_fan\",\"object_id\":\"localair_");
         p.print(_identity); p.print("_fan\",");
         p.print("\"payload_on\":\"{\\\"speed\\\":10}\",\"payload_off\":\"{\\\"mode\\\":\\\"auto\\\"}\"}");
-    });
+    })) return false;
+    return true;
 }

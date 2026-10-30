@@ -38,6 +38,7 @@
 #include "sys/watchdog.h"
 #include "net/http_server.h"
 #include "net/mdns_responder.h"
+#include "net/mdns_service.h"
 #include "net/mqtt_client.h"
 
 SYSTEM_MODE(AUTOMATIC);   // Particle manages WiFi
@@ -566,37 +567,16 @@ static bool restoreManualControlAfterStartup(uint32_t now, uint8_t prev,
 }
 
 static void serviceMdns() {
-    static IPAddress s_mdns_ip;
-
-    // WiFi drop: the UDP socket and IGMP membership are dead. Tear down so
-    // the begin() branch rebuilds both when the network returns.
-    if (g_mdns_started && !WiFi.ready()) {
-        g_mdns.stop();
-        g_mdns_started = false;
+    static MdnsServiceState state;
+    const bool changed = mdnsServiceTick(state, g_mdns, g_mdns_started,
+                                         WiFi.ready(), g_config.mdns_base_name);
+    if (changed || (g_mdns_started && strcmp(g_mdns_host, g_mdns.hostname()) != 0)) {
         updateNetworkInfo();
-        Serial.println("  mDNS stopped: WiFi down, will rebuild on reconnect");
-        return;
-    }
-
-    if (!g_mdns_started) {
-        if (WiFi.ready() && g_mdns.begin(g_config.mdns_base_name)) {
-            g_mdns_started = true;
-            s_mdns_ip = WiFi.localIP();
-            updateNetworkInfo();
+        if (g_mdns_started) {
             Serial.printlnf("  mDNS hostname: %s.local", g_mdns.hostname());
+        } else {
+            Serial.println("  mDNS down, retrying");
         }
-    }
-    if (g_mdns_started) {
-        // DHCP renew without a visible drop: advertised A record is stale
-        IPAddress now_ip = WiFi.localIP();
-        if (now_ip != s_mdns_ip) {
-            s_mdns_ip = now_ip;
-            if (g_mdns.restart(g_config.mdns_base_name)) {
-                updateNetworkInfo();
-                Serial.printlnf("  mDNS restarted for new IP: %s.local", g_mdns.hostname());
-            }
-        }
-        g_mdns.poll();
     }
 }
 
@@ -1046,6 +1026,11 @@ void loop() {
             g_force_control_tick = true;
             force_control_now = true;
         }
+    }
+
+    static bool s_was_manual = false;
+    if (persistAutoAfterManualEnds(g_cmd.manualOverrideDesired(), &s_was_manual)) {
+        Serial.println("  control: manual ended without request, saved auto");
     }
 
     // If the backend has been armed after a fail-closed period, mark the

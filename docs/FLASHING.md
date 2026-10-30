@@ -14,17 +14,17 @@ account, device ID, Wi-Fi, safe mode, and claiming.
 
 ## Release binary
 
-Release v1.0.0 contains build 56:
+Release v1.1.0 contains build 61:
 
 ```text
-version: localair-rev1+b56
+version: localair-rev1+b61
 file: localair-rev1.bin
-size: 120044 bytes
-SHA-256: 8b294e461fbf2071fa3d56893e9bae5d1b433ea8993cba86d2cf8964f61e676f
+size: 121244 bytes
+SHA-256: b0cfaa6f53f033fb56cf3f4ae041c5bce3a5a791396b5bc785fd2a3bc56fa813
 ```
 
 Download `localair-rev1.bin`, `SHA256SUMS`, and `release-info.json` from the
-[v1.0.0 release](https://github.com/phatwila/LocalAir-Rev1/releases/tag/v1.0.0)
+[v1.1.0 release](https://github.com/phatwila/LocalAir-Rev1/releases/tag/v1.1.0)
 into one folder, then verify them from that folder:
 
 ```bash
@@ -98,7 +98,7 @@ particle get <device-id> BUILD_NUM
 particle get <device-id> localIP
 ```
 
-Cloud values should report `localair-rev1+b56` and build `56` for this binary.
+Cloud values should report `localair-rev1+b61` and build `61` for this binary.
 
 ## Verify runtime status
 
@@ -110,7 +110,7 @@ For a scripted check, clone the repository and run `device-status.sh` from it
 git clone https://github.com/phatwila/LocalAir-Rev1.git
 cd LocalAir-Rev1
 ./bin/device-status.sh <device-ip> --expect-id <device-id> \
-  --expect-version localair-rev1+b56 --expect-build 56 \
+  --expect-version localair-rev1+b61 --expect-build 61 \
   --require-fresh-rpm --events
 ```
 

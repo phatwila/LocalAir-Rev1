@@ -3,6 +3,7 @@
 #include "json_utils.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,8 +44,9 @@ inline bool parsePlainInt(const char* payload, int* out) {
     if (*payload == '\0') return false;
 
     char* end = nullptr;
+    errno = 0;
     long value = strtol(payload, &end, 10);
-    if (end == payload) return false;
+    if (end == payload || errno == ERANGE) return false;
     while (end && *end && isspace((unsigned char)*end)) {
         ++end;
     }

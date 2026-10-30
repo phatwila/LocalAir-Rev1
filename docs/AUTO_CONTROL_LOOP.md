@@ -19,6 +19,8 @@ Manual > Startup > Schedule > Auto > Fallback
 ```
 
 Manual control persists as the selected intent until the user returns to Auto.
+A fan apply timeout, apply failure, or backend loss that ends Manual control
+saves Auto, so a reboot does not bring Manual back.
 Schedule control uses its configured percentage while active. It does not
 overwrite saved Manual intent. Returning to Auto clears Manual intent.
 
@@ -66,7 +68,8 @@ one nominal second.
 
 Airflow slew uses 10 percentage points per second upward, 20 during purge, 5
 downward, and 3 during recovery. Each control call contributes at most one
-second. A three-second post-rise hold and existing step dwell periods remain.
+second. A three-second post-rise hold remains. Each slower fan step then
+waits at least 15 seconds after the previous downshift.
 
 ## Bounds, fallback, and quantization
 

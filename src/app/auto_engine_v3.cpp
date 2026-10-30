@@ -22,8 +22,7 @@ constexpr uint32_t DOMINANCE_PERSIST_MS = 10000;
 constexpr uint32_t MODE_RECOVER_EXIT_MS = 60000;
 constexpr uint32_t MODE_PURGE_EXIT_MS = 20000;
 constexpr uint32_t VENT_PERSIST_MS = 30000;
-constexpr uint32_t RECOVER_DOWNSHIFT_DWELL_MS = 6000;
-constexpr uint32_t DEFAULT_DOWNSHIFT_DWELL_MS = 4000;
+constexpr uint32_t DOWNSHIFT_DWELL_MS = 15000;
 
 constexpr float PM_RISE_GAIN = 0.01f;
 constexpr float VOC_RISE_GAIN = 0.01f;
@@ -567,6 +566,7 @@ AutoEngineV3::Result AutoEngineV3::computeTarget(const AutoCycleInputs& inputs) 
         limited_pct = fminf(limited_pct, rate_prev_pct + slew * slew_seconds);
         _state.last_rate_limit_ms = inputs.now_ms;
         _state.last_downshift_ms = 0;
+        _state.last_downshift_valid = false;
     } else if (falling) {
         const uint32_t since_rate = _state.last_rate_limit_ms == 0 ? UINT32_MAX
                                                                   : (uint32_t)(inputs.now_ms - _state.last_rate_limit_ms);
@@ -578,16 +578,14 @@ AutoEngineV3::Result AutoEngineV3::computeTarget(const AutoCycleInputs& inputs) 
             const uint8_t prev_step = _state.rate_limit_initialized && _state.last_quantized_step >= 1 && _state.last_quantized_step <= 16
                 ? _state.last_quantized_step
                 : AutoEngineV3::quantizeTarget(rate_prev_pct, 1, 16).quantized_step;
-            const uint8_t candidate_step = AutoEngineV3::quantizeTarget(candidate_pct, 1, 16).quantized_step;
+            const uint8_t candidate_step = fanStepWithinPercentBounds(candidate_pct, inputs.min_fan_percent, inputs.max_fan_percent > 0 ? inputs.max_fan_percent : 100);
             if (candidate_step > prev_step) {
-                const uint32_t dwell_ms = (_state.mode == AutoMode::Recover)
-                    ? RECOVER_DOWNSHIFT_DWELL_MS
-                    : DEFAULT_DOWNSHIFT_DWELL_MS;
-                const uint32_t since_downshift = _state.last_downshift_ms == 0 ? UINT32_MAX
+                const uint32_t since_downshift = !_state.last_downshift_valid ? UINT32_MAX
                                                                                : (uint32_t)(inputs.now_ms - _state.last_downshift_ms);
-                if (since_downshift >= dwell_ms) {
+                if (since_downshift >= DOWNSHIFT_DWELL_MS) {
                     limited_pct = candidate_pct;
                     _state.last_downshift_ms = inputs.now_ms;
+                    _state.last_downshift_valid = true;
                 } else {
                     limited_pct = rate_prev_pct;
                 }
@@ -597,6 +595,7 @@ AutoEngineV3::Result AutoEngineV3::computeTarget(const AutoCycleInputs& inputs) 
         }
     } else {
         _state.last_downshift_ms = 0;
+        _state.last_downshift_valid = false;
     }
 
     const bool floor_applied = user_floor_applied;

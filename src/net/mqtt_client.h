@@ -31,6 +31,11 @@ private:
     static constexpr size_t TOPIC_LEN = 96;
     static constexpr size_t CLIENT_ID_LEN = 40;
     static constexpr size_t RX_LEN = 256;
+    static constexpr uint32_t RX_PACKET_TIMEOUT_MS = 1000;
+    static constexpr uint32_t TX_PACKET_TIMEOUT_MS = 5000;
+    static constexpr uint32_t SUBACK_TIMEOUT_MS = 2000;
+    static constexpr uint32_t RX_LOOP_BUDGET_MS = 20;
+    static constexpr uint8_t MAX_INCOMING_PACKETS_PER_LOOP = 4;
 
     Config* _config;
     const char* _mdns_host;
@@ -58,15 +63,17 @@ private:
     bool connectBroker();
     bool sendConnectPacket();
     bool publishPacket(const char* topic, const char* payload, bool retain);
-    bool subscribeTopic(const char* topic);
+    bool subscribeTopic(const char* topic, uint16_t* packet_id);
+    bool awaitSubscriptions(uint16_t cmd_packet_id, uint16_t pct_packet_id);
     bool sendPing();
     bool sendPacket(const uint8_t* data, size_t len);
-    bool readPacket(uint8_t* type, uint8_t* payload, size_t payload_cap, size_t* payload_len);
-    bool readRemainingLength(size_t* remaining);
-    bool readExact(uint8_t* out, size_t len, uint32_t timeout_ms);
-    int readByte(uint32_t timeout_ms);
+    bool readPacket(uint8_t* type, uint8_t* payload, size_t payload_cap, size_t* payload_len,
+                    uint32_t timeout_ms = RX_PACKET_TIMEOUT_MS);
+    bool readRemainingLength(size_t* remaining, uint32_t deadline);
+    bool readExact(uint8_t* out, size_t len, uint32_t deadline);
+    int readByte(uint32_t deadline);
     uint16_t nextPacketId();
     void serviceIncoming();
-    void sendHaDiscovery();
-    void handleMessage(const char* topic, const char* payload);
+    bool sendHaDiscovery();
+    void handleMessage(const char* topic, const char* payload, bool retained_message);
 };

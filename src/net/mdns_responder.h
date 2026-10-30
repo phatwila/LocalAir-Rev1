@@ -54,14 +54,17 @@ private:
     uint32_t _next_rejoin_ms;     // periodic IGMP re-join timer
     uint8_t  _announce_count;     // tracks the 3-burst startup sequence
     uint16_t _suffix;
+    uint8_t  _io_failures;        // consecutive send/join failures while running
 
     // Build/send helpers
     bool _claim(const char* base_name, uint16_t start_suffix);
     bool _formatCandidate(char* out, size_t out_len,
                           const char* base_name, uint16_t suffix) const;
-    bool _probe(const char* name, uint8_t len);
-    void _announce();
+    int _probe(const char* name, uint8_t len);
+    bool _announce();
     void _sendGoodbye();
+    bool _noteIo(bool ok);
+    bool _sendPacket(IPAddress destination, uint16_t port, const uint8_t* data, uint16_t len);
     void _handleQuery(const uint8_t* pkt, uint16_t pkt_len,
                       IPAddress remote, uint16_t rport);
     bool _detectRuntimeConflict(const uint8_t* pkt, uint16_t pkt_len) const;
